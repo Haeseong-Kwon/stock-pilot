@@ -169,23 +169,24 @@ export function FinancialChart({ candles, loading, error }: Props) {
       const pane = plot.target === 'own' ? paneIndex : 0
       const priceScaleId = plot.target === 'volume' ? 'volume' : undefined
 
-      if (plot.histogram) {
-        const hist = chart.addSeries(
-          HistogramSeries,
-          { color: 'rgba(74, 158, 255, 0.4)', priceLineVisible: false, lastValueVisible: false },
-          pane,
-        )
-        hist.setData(
-          plot.histogram.data.map((p) => ({
-            time: p.time as UTCTimestamp,
-            value: p.value,
-            color: p.value >= 0 ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)',
-          })),
-        )
-        indicatorSeriesRef.current.push(hist)
-      }
-
       for (const line of plot.lines) {
+        if (line.style === 'histogram') {
+          const hist = chart.addSeries(
+            HistogramSeries,
+            { priceLineVisible: false, lastValueVisible: false, ...(priceScaleId ? { priceScaleId } : {}) },
+            pane,
+          )
+          hist.setData(
+            line.data.map((point) => ({
+              time: point.time as UTCTimestamp,
+              value: point.value,
+              color: point.value >= 0 ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)',
+            })),
+          )
+          indicatorSeriesRef.current.push(hist)
+          continue
+        }
+
         const series = chart.addSeries(
           LineSeries,
           {
@@ -198,7 +199,7 @@ export function FinancialChart({ candles, loading, error }: Props) {
           },
           pane,
         )
-        series.setData(line.data.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })))
+        series.setData(line.data.map((point) => ({ time: point.time as UTCTimestamp, value: point.value })))
         indicatorSeriesRef.current.push(series)
       }
 

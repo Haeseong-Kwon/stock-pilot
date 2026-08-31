@@ -1,22 +1,24 @@
 import type { Candle, Series } from '@/lib/types'
-import { atr, bollinger, ema, macd, rsi, sma } from '@/lib/analysis/indicators'
-import { volatility } from '@/lib/analysis/statistics/volatility'
+import { computeIndicator, indicatorSpec } from '@/lib/analysis/indicators/registry'
 import type { IndicatorDef } from './indicators'
 import { indicatorLabel, isOverlay } from './indicators'
 
 export type LinePoint = { time: number; value: number }
-export type PlottedLine = { key: string; label: string; color: string; data: LinePoint[] }
+export type PlottedLine = {
+  key: string
+  label: string
+  color: string
+  style: 'line' | 'histogram'
+  data: LinePoint[]
+}
 
 export type IndicatorPlot = {
   def: IndicatorDef
   /** `price` overlays the candles, `volume` shares the volume scale, `own` gets a pane. */
   target: 'price' | 'volume' | 'own'
   lines: PlottedLine[]
-  histogram?: PlottedLine
   /** Reference lines drawn inside the indicator pane (e.g. RSI 30 / 70). */
   guides?: number[]
-  /** Fixed pane scale, when the indicator has a natural range. */
-  bounds?: { min: number; max: number }
 }
 
 function toPoints(candles: Candle[], values: Series): LinePoint[] {
@@ -30,115 +32,33 @@ function toPoints(candles: Candle[], values: Series): LinePoint[] {
   return out
 }
 
-const shade = (color: string, alpha: number) => {
+/** Dims a hex colour so band edges read as secondary. */
+function shade(color: string, alpha: number): string {
   const hex = color.replace('#', '')
-  const num = Number.parseInt(hex.length === 3 ? hex.replace(/(.)/g, '$1$1') : hex, 16)
+  const expanded = hex.length === 3 ? hex.replace(/(.)/g, '$1$1') : hex
+  const num = Number.parseInt(expanded, 16)
+  if (Number.isNaN(num)) return color
   return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`
 }
 
 export function buildIndicatorPlot(candles: Candle[], def: IndicatorDef): IndicatorPlot {
-  const closes = candles.map((c) => c.close)
-  const p = def.params
+  const spec = indicatorSpec(def.type)
+  const series = computeIndicator(def.type, candles, def.params)
   const label = indicatorLabel(def)
 
-  switch (def.type) {
-    case 'SMA':
-      return {
-        def,
-        target: 'price',
-        lines: [{ key: def.id, label, color: def.color, data: toPoints(candles, sma(sourceOf(candles, def), p.period ?? 20)) }],
-      }
-    case 'EMA':
-      return {
-        def,
-        target: 'price',
-        lines: [{ key: def.id, label, color: def.color, data: toPoints(candles, ema(sourceOf(candles, def), p.period ?? 20)) }],
-      }
-    case 'BOLLINGER': {
-      const bands = bollinger(closes, p.period ?? 20, p.stdDev ?? 2)
-      return {
-        def,
-        target: 'price',
-        lines: [
-          { key: `${def.id}:u`, label: `${label} upper`, color: shade(def.color, 0.85), data: toPoints(candles, bands.upper) },
-          { key: `${def.id}:m`, label: `${label} basis`, color: shade(def.color, 0.45), data: toPoints(candles, bands.middle) },
-          { key: `${def.id}:l`, label: `${label} lower`, color: shade(def.color, 0.85), data: toPoints(candles, bands.lower) },
-        ],
-      }
-    }
-    case 'VOLUME_SMA':
-      return {
-        def,
-        target: 'volume',
-        lines: [
-          {
-            key: def.id,
-            label,
-            color: def.color,
-            data: toPoints(candles, sma(candles.map((c) => c.volume), p.period ?? 20)),
-          },
-        ],
-      }
-    case 'RSI':
-      return {
-        def,
-        target: 'own',
-        lines: [{ key: def.id, label, color: def.color, data: toPoints(candles, rsi(closes, p.period ?? 14)) }],
-        guides: [30, 70],
-        bounds: { min: 0, max: 100 },
-      }
-    case 'MACD': {
-      const result = macd(closes, p.fast ?? 12, p.slow ?? 26, p.signal ?? 9)
-      return {
-        def,
-        target: 'own',
-        lines: [
-          { key: `${def.id}:macd`, label: `${label} MACD`, color: def.color, data: toPoints(candles, result.macd) },
-          { key: `${def.id}:signal`, label: `${label} signal`, color: '#f0b429', data: toPoints(candles, result.signal) },
-        ],
-        histogram: {
-          key: `${def.id}:hist`,
-          label: `${label} histogram`,
-          color: def.color,
-          data: toPoints(candles, result.histogram),
-        },
-        guides: [0],
-      }
-    }
-    case 'ATR':
-      return {
-        def,
-        target: 'own',
-        lines: [{ key: def.id, label, color: def.color, data: toPoints(candles, atr(candles, p.period ?? 14)) }],
-      }
-    case 'VOLATILITY':
-      return {
-        def,
-        target: 'own',
-        lines: [
-          {
-            key: def.id,
-            label,
-            color: def.color,
-            data: toPoints(candles, volatility(closes, p.period ?? 20)),
-          },
-        ],
-      }
-  }
-}
+  const lines: PlottedLine[] = spec.outputs.map((output) => ({
+    key: `${def.id}:${output.key}`,
+    label: spec.outputs.length === 1 ? label : `${label} ${output.label}`,
+    color: output.color ?? (output.muted ? shade(def.color, 0.5) : def.color),
+    style: output.style ?? 'line',
+    data: toPoints(candles, series[output.key] ?? []),
+  }))
 
-function sourceOf(candles: Candle[], def: IndicatorDef): Series {
-  switch (def.params.source) {
-    case 'OPEN':
-      return candles.map((c) => c.open)
-    case 'HIGH':
-      return candles.map((c) => c.high)
-    case 'LOW':
-      return candles.map((c) => c.low)
-    case 'VOLUME':
-      return candles.map((c) => c.volume)
-    default:
-      return candles.map((c) => c.close)
+  return {
+    def,
+    target: spec.pane,
+    lines,
+    ...(spec.guides ? { guides: spec.guides } : {}),
   }
 }
 

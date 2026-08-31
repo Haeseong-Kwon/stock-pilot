@@ -1,6 +1,7 @@
 import type { Candle, Series } from '@/lib/types'
 import type { Condition, Expression, Operand, PriceSource } from '@/lib/schemas/expression'
 import { atr, bollinger, ema, macd, rsi, sma } from '@/lib/analysis/indicators'
+import { computeIndicator, indicatorSpec } from '@/lib/analysis/indicators/registry'
 import { returns } from '@/lib/analysis/statistics/returns'
 import { volatility } from '@/lib/analysis/statistics/volatility'
 import { drawdown } from '@/lib/analysis/statistics/drawdown'
@@ -87,6 +88,14 @@ function compute(candles: Candle[], expr: Expression, cache: Cache): Series {
     case 'LAG': {
       const inner = evaluateOperand(candles, expr.value, cache)
       return inner.map((_, i) => (i >= expr.bars ? (inner[i - expr.bars] ?? null) : null))
+    }
+    case 'INDICATOR': {
+      const spec = indicatorSpec(expr.name)
+      const outputs = computeIndicator(expr.name, candles, expr.params ?? {})
+      const key = expr.output ?? spec.outputs[0]?.key
+      const series = key ? outputs[key] : undefined
+      // An unknown output name must not silently read as another series.
+      return series ?? new Array(candles.length).fill(null)
     }
     case 'ADD':
     case 'SUBTRACT':

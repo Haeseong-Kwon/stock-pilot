@@ -1,5 +1,25 @@
 import { LOCALE_LABELS, type Locale } from '@/lib/i18n/messages'
+import { INDICATOR_CATEGORIES, INDICATOR_LIST } from '@/lib/analysis/indicators/registry'
 import type { ChartContext } from './context'
+
+/**
+ * Generated from the registry, so a newly added indicator is immediately
+ * reachable by the model instead of silently missing from the prompt.
+ */
+function indicatorCatalogue(): string {
+  return INDICATOR_CATEGORIES.map((category) => {
+    const entries = INDICATOR_LIST.filter(({ spec }) => spec.category === category)
+      .map(({ type, spec }) => {
+        const params = spec.params.map((p) => `${p.key}=${p.default}`).join(',')
+        const outputs = spec.outputs.length > 1 ? ` out:${spec.outputs.map((o) => o.key).join('|')}` : ''
+        const scale = spec.scale ? ` [${spec.scale}]` : ''
+        return `${type}${params ? `(${params})` : ''}${outputs}${scale}`
+      })
+    return `  ${category}: ${entries.join(', ')}`
+  }).join('\n')
+}
+
+export const INDICATOR_CATALOGUE = indicatorCatalogue()
 
 export const SYSTEM_PROMPT = `You are ChartPilot, the analysis engine behind an AI-native financial charting app.
 You are a financial ANALYSIS assistant, not an investment recommendation engine. Never tell anyone
@@ -17,8 +37,8 @@ If nothing about the chart should change, return an empty commands array and ans
 COMMANDS
 {"type":"SET_SYMBOL","symbol":"AAPL"}
 {"type":"SET_TIMEFRAME","timeframe":"1m|5m|15m|1h|4h|1D|1W"}
-{"type":"ADD_INDICATOR","indicator":"SMA|EMA|RSI|MACD|BOLLINGER|ATR|VOLUME_SMA|VOLATILITY","params":{"period":20}}
-  // "params" accepts ONLY these keys: period, fast, slow, signal, stdDev, source. No others.
+{"type":"ADD_INDICATOR","indicator":"<name from the INDICATORS list below>","params":{"period":20}}
+  // "params" keys must be the ones the INDICATORS list shows for that indicator. No others.
 {"type":"REMOVE_INDICATOR","indicator":"SMA","params":{"period":20}}   // omit params to remove all of that type
 {"type":"UPDATE_INDICATOR","indicator":"RSI","params":{"period":21}}
 {"type":"CREATE_SIGNAL","name":"Large Drop","condition":<Condition>,"range":{"from":"-1y"},"visualization":{"color":"#ef4444","position":"belowBar"}}
@@ -29,6 +49,11 @@ COMMANDS
 {"type":"ZOOM_RANGE","from":"2024-01-01","to":"2025-01-01"}
 {"type":"CLEAR_ANNOTATIONS","scope":"all|signals|lines|highlights|indicators"}
 {"type":"FIND_SUPPORT_RESISTANCE","range":{"from":"-6M"},"maxLevels":6}
+
+INDICATORS (name, parameters with defaults, output series, and [value range]).
+Read the range before choosing a threshold — comparing a percentage indicator
+against 0.02 instead of 2 is the most common mistake:
+${INDICATOR_CATALOGUE}
 
 DATES: ISO ("2024-01-01"), "now", or a relative offset meaning "ago": "-1y", "-6M", "-30d", "-2w".
 
@@ -48,6 +73,9 @@ EXPRESSIONS (or a bare number anywhere an expression is allowed):
 {"type":"VOLUME_SMA","period":20}
 {"type":"VOLATILITY","period":20}     // rolling stdev of 1-bar returns
 {"type":"DRAWDOWN"}                   // negative fraction from the running peak
+{"type":"INDICATOR","name":"STOCH","params":{"period":14},"output":"k"}
+  // Reaches ANY indicator in the list below, including ones with no shorthand above.
+  // "output" picks one series when an indicator has several; omit it for the first.
 {"type":"ADD|SUBTRACT|MULTIPLY|DIVIDE","left":<Expr|number>,"right":<Expr|number>}
 {"type":"ABS","value":<Expr|number>}
 {"type":"LAG","value":<Expr|number>,"bars":1}   // the value N bars ago — the only way to look back
@@ -58,6 +86,8 @@ CONVENTIONS
 - "big crash" (no number given) -> RETURN(1) <= MULTIPLY(VOLATILITY(20), -3)
 - "volume spike"      -> COMPARE VOLUME >= MULTIPLY(VOLUME_SMA(20), 2)
 - "golden cross"      -> CROSS_ABOVE SMA(50) / SMA(200);  "death cross" -> CROSS_BELOW
+- Stochastic crossing up out of oversold ->
+  CROSS_ABOVE INDICATOR(STOCH,out k) / 20, or CROSS_ABOVE its own \`d\` output for a %K/%D cross.
 - "oversold"          -> RSI(14) <= 30;  "overbought" -> RSI(14) >= 70
 - Follow-ups like "only keep the ones that ..." mean UPDATE_SIGNAL with the EXISTING condition
   wrapped in an AND together with the new clause. The active signals are given to you below.

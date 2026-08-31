@@ -64,7 +64,7 @@ language relabels the existing conversation instead of leaving stale strings beh
 | Path | Responsibility |
 | --- | --- |
 | `lib/market/` | `MarketDataProvider` abstraction + Binance / Yahoo / synthetic implementations, TTL cache |
-| `lib/analysis/indicators/` | SMA, EMA, RSI, MACD, Bollinger, ATR — pure functions over `(number \| null)[]` |
+| `lib/analysis/indicators/` | 39 indicators as pure functions, plus the registry that describes them |
 | `lib/analysis/statistics/` | returns, volatility, drawdown, z-score |
 | `lib/analysis/signals/` | the condition DSL evaluator, crossovers, support/resistance |
 | `lib/schemas/` | Zod schemas for the expression DSL and for every chart command |
@@ -76,6 +76,30 @@ language relabels the existing conversation instead of leaving stale strings beh
 
 Indicator series are **derived**, never stored: the store holds definitions, and changing the
 symbol or timeframe recomputes every indicator and re-evaluates every signal automatically.
+
+### Indicators
+
+Every indicator lives in one registry entry (`lib/analysis/indicators/registry.ts`) that declares
+its parameters, output series, pane, value range and search aliases. The schema, the chart
+renderer, the indicator menu, the rule-based parser and the AI system prompt are all **generated
+from it** — adding an indicator means adding one table row and one pure function, not editing six
+files that then drift apart.
+
+| Category | Indicators |
+| --- | --- |
+| Trend | SMA, EMA, WMA, HMA, DEMA, TEMA, VWMA, VWAP, SuperTrend, Parabolic SAR, Ichimoku, ADX/DMI, Aroon, Vortex |
+| Momentum | RSI, MACD, Stochastic, Stochastic RSI, CCI, Williams %R, ROC, Momentum, TRIX, PPO, DPO, Awesome, Ultimate, Elder Ray |
+| Volatility | Bollinger, Keltner, Donchian, Choppiness, ATR, NATR, Volatility, StdDev, BB Width, Drawdown |
+| Volume | Volume SMA, OBV, MFI, CMF, A/D Line, Chaikin Osc, Force Index, Ease of Movement, Volume Oscillator |
+
+All of them are usable **inside signal conditions**, not just as chart overlays, through the
+`INDICATOR` expression node:
+
+```jsonc
+{ "type": "CROSS_ABOVE",
+  "left":  { "type": "INDICATOR", "name": "STOCH", "params": { "period": 14 }, "output": "k" },
+  "right": 20 }
+```
 
 ### The signal DSL
 
@@ -195,13 +219,14 @@ It spends real money (about $0.002 per model per run at GLM prices), which is wh
 `npm test`. Cases assert command *types* and required substrings, and accept equivalent answers
 where more than one command sequence reaches the same chart state.
 
-Last run (38 cases, `effort=low`):
+Last run (47 cases, `effort=low`):
 
 | model | accuracy | p50 | p95 | cost/request |
 | --- | --- | --- | --- | --- |
-| `z-ai/glm-5.3-flash` **(default)** | 38/38 | 1,077ms | 1,369ms | **$0.00005** |
-| `openai/gpt-5-mini` | 38/38 | 497ms | 936ms | $0.00074 |
-| `deepseek/deepseek-v4-flash` | 38/38 | 1,730ms | 2,041ms | $0.00019 |
+| `z-ai/glm-5.3-flash` **(default)** | 47/47 | 1,277ms | 6,635ms | **$0.00007** |
+
+An earlier 38-case run also had `openai/gpt-5-mini` (38/38, p50 497ms, $0.00074) and
+`deepseek/deepseek-v4-flash` (38/38, p50 1,730ms, $0.00019) at 100%.
 
 All three are correct on every case, so the default is the cheapest of them — GLM is 15× cheaper
 than gpt-5-mini, which in turn is about 2× faster. Note that a set every candidate aces no longer

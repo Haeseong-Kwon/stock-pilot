@@ -1,5 +1,6 @@
 import type { Condition } from '@/lib/schemas/expression'
 import type { AiResponse, ChartCommand, IndicatorType } from '@/lib/schemas/chartCommand'
+import { INDICATOR_LIST } from '@/lib/analysis/indicators/registry'
 import { SYMBOL_CATALOGUE } from '@/lib/market/symbols'
 import type { Timeframe } from '@/lib/types'
 import { translator, type Locale } from '@/lib/i18n/messages'
@@ -81,7 +82,87 @@ function detectDates(text: string): string[] {
   })
 }
 
+/**
+ * Name matchers built from the registry, longest first so STOCH_RSI wins over
+ * STOCH. ASCII names need a word boundary; Korean ones do not have them.
+ */
+const INDICATOR_MATCHERS: Array<{ type: IndicatorType; pattern: RegExp }> = INDICATOR_LIST.flatMap(
+  ({ type, spec }) =>
+    [type, type.replace(/_/g, ' '), spec.name, ...(spec.aliases ?? [])].map((name) => ({ type, name })),
+)
+  .sort((a, b) => b.name.length - a.name.length)
+  .map(({ type, name }) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*')
+    const ascii = /^[\x20-\x7e]+$/.test(name)
+    return { type, pattern: new RegExp(ascii ? `\\b${escaped}\\b` : escaped, 'i') }
+  })
+
+/** These read as conditions, not as "put this on the chart". */
+const INDICATOR_SUPPRESSORS: Partial<Record<IndicatorType, RegExp>> = {
+  // "RSI 30 이하" is a threshold; a bare "RSI" is a request for the pane.
+  RSI: /rsi[^0-9]{0,12}\d/i,
+  BOLLINGER: /이탈|아래|하단|위|상단|돌파|below|above|break/i,
+  STOCH_RSI: /stoch[^0-9]{0,12}\d/i,
+}
+
 type Fragment = { condition: Condition; name: string; color: string; indicator?: IndicatorType }
+
+/** RSI has its own rule with oversold/overbought defaults; the rest share this one. */
+const GENERIC_THRESHOLD_SKIP = new Set<IndicatorType>(['RSI', 'BOLLINGER', 'VOLUME_SMA', 'SMA', 'EMA'])
+
+const CROSS_UP = /위로|상향\s*돌파|올라온|올라선|crosses?\s*(back\s*)?above|breaks?\s*above/i
+const CROSS_DOWN = /아래로|하향\s*돌파|내려온|내려선|crosses?\s*(back\s*)?below|breaks?\s*below/i
+const BELOW = /이하|아래|밑|미만|below|under|less/i
+const ABOVE = /이상|위|초과|넘|above|over|greater/i
+
+/**
+ * "MFI 20 이하", "ADX가 25 넘는", "스토캐스틱이 20을 상향 돌파" — one rule that
+ * works for every indicator in the registry instead of a regex per indicator.
+ */
+function indicatorThresholdFragment(text: string): Fragment | null {
+  for (const matcher of INDICATOR_MATCHERS) {
+    if (GENERIC_THRESHOLD_SKIP.has(matcher.type)) continue
+    const found = matcher.pattern.exec(text)
+    if (!found) continue
+
+    // The threshold is the first number after the indicator's name.
+    const after = text.slice(found.index + found[0].length)
+    const number = /(-?\d+(?:\.\d+)?)/.exec(after)
+    if (!number?.[1]) continue
+    const level = Number(number[1])
+    if (!Number.isFinite(level)) continue
+
+    const spec = INDICATOR_LIST.find((entry) => entry.type === matcher.type)?.spec
+    const left = { type: 'INDICATOR' as const, name: matcher.type }
+    const label = spec?.short ?? matcher.type
+
+    if (CROSS_UP.test(after)) {
+      return {
+        condition: { type: 'CROSS_ABOVE', left, right: level },
+        name: `${label} ↗ ${level}`,
+        color: '#22c55e',
+        indicator: matcher.type,
+      }
+    }
+    if (CROSS_DOWN.test(after)) {
+      return {
+        condition: { type: 'CROSS_BELOW', left, right: level },
+        name: `${label} ↘ ${level}`,
+        color: '#ef4444',
+        indicator: matcher.type,
+      }
+    }
+    const below = BELOW.test(after)
+    if (!below && !ABOVE.test(after)) continue
+    return {
+      condition: { type: 'COMPARE', left, operator: below ? '<=' : '>=', right: level },
+      name: `${label} ${below ? '≤' : '≥'} ${level}`,
+      color: below ? '#3b82f6' : '#f97316',
+      indicator: matcher.type,
+    }
+  }
+  return null
+}
 
 const STREAK = /(\d+)\s*(?:일|days?|bars?)?\s*(?:연속|in\s*a\s*row|consecutive)/i
 
@@ -111,6 +192,9 @@ function collectFragments(text: string): Fragment[] {
 
   const streak = streakFragment(text)
   if (streak) fragments.push(streak)
+
+  const threshold = indicatorThresholdFragment(text)
+  if (threshold) fragments.push(threshold)
 
   // Percentage move, e.g. "5% 이상 떨어진" / "rose more than 3%"
   const percent = streak ? null : numberBefore(text, /\s*%|퍼센트|percent/)
@@ -246,31 +330,35 @@ function collectIndicators(text: string, removing: boolean): ChartCommand[] {
   const commands: ChartCommand[] = []
   const type = removing ? 'REMOVE_INDICATOR' : 'ADD_INDICATOR'
 
+  // Moving averages are special: the period comes before the name ("20일선").
   const maPattern = /(\d+)\s*(?:일|day|-day)?\s*(?:선|이동\s*평균(?:선)?|이평(?:선)?|sma|ma|moving\s*average)/gi
+  const named = new Set<IndicatorType>()
   for (const match of text.matchAll(maPattern)) {
     const period = Number(match[1])
     if (!Number.isFinite(period) || period < 1 || period > 1000) continue
     const kind: IndicatorType = /지수|ema|exponential/i.test(match[0]) ? 'EMA' : 'SMA'
     commands.push({ type, indicator: kind, params: { period } })
+    named.add(kind)
   }
   for (const match of text.matchAll(/(\d+)\s*(?:일)?\s*(?:지수이동평균|ema)/gi)) {
     const period = Number(match[1])
-    if (Number.isFinite(period)) commands.push({ type, indicator: 'EMA', params: { period } })
+    if (!Number.isFinite(period)) continue
+    commands.push({ type, indicator: 'EMA', params: { period } })
+    named.add('EMA')
   }
 
-  if (/\brsi\b/i.test(text) && !/rsi[^0-9]{0,12}\d/i.test(text)) {
-    commands.push({ type, indicator: 'RSI' })
-  }
-  if (/macd/i.test(text)) commands.push({ type, indicator: 'MACD' })
-  if (/볼린저|bollinger/i.test(text) && !/이탈|아래|하단|위|상단|돌파|below|above|break/i.test(text)) {
-    commands.push({ type, indicator: 'BOLLINGER' })
-  }
-  if (/\batr\b|변동성\s*지표/i.test(text)) commands.push({ type, indicator: 'ATR' })
-  if (/거래량\s*(?:이동\s*)?평균|volume\s*(?:sma|average|ma)\b/i.test(text)) {
-    commands.push({ type, indicator: 'VOLUME_SMA' })
-  }
-  if (/변동성\s*(지표|추가|보여)|volatility\s*(indicator|band)?/i.test(text) && !/변동성의|volatility\)/i.test(text)) {
-    commands.push({ type, indicator: 'VOLATILITY' })
+  // Everything else is matched by name against the registry.
+  const seen = new Set<IndicatorType>(named)
+  for (const matcher of INDICATOR_MATCHERS) {
+    if (seen.has(matcher.type)) continue
+    if (!matcher.pattern.test(text)) continue
+    const suppressor = INDICATOR_SUPPRESSORS[matcher.type]
+    if (suppressor?.test(text)) {
+      seen.add(matcher.type)
+      continue
+    }
+    seen.add(matcher.type)
+    commands.push({ type, indicator: matcher.type })
   }
 
   return commands

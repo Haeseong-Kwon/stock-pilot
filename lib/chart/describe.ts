@@ -1,4 +1,5 @@
 import type { Condition, Expression, Operand } from '@/lib/schemas/expression'
+import { indicatorSpec } from '@/lib/analysis/indicators/registry'
 
 const PERCENT_EXPRESSIONS = new Set(['RETURN', 'DRAWDOWN', 'VOLATILITY'])
 
@@ -42,6 +43,12 @@ function describeExpression(expr: Expression): string {
       return `|${describeOperand(expr.value)}|`
     case 'LAG':
       return `${describeOperand(expr.value)}[-${expr.bars}]`
+    case 'INDICATOR': {
+      const spec = indicatorSpec(expr.name)
+      const values = spec.params.map((param) => expr.params?.[param.key] ?? param.default)
+      const label = values.length > 0 ? `${spec.short}(${values.join(', ')})` : spec.short
+      return expr.output && spec.outputs.length > 1 ? `${label} ${expr.output}` : label
+    }
     case 'ADD':
       return `${describeOperand(expr.left)} + ${describeOperand(expr.right)}`
     case 'SUBTRACT':

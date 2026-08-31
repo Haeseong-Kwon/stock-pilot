@@ -3,18 +3,18 @@
 import { X } from 'lucide-react'
 import { useChartStore } from '@/stores/chartStore'
 import { indicatorLabel } from '@/lib/chart/indicators'
+import { indicatorSpec } from '@/lib/analysis/indicators/registry'
+import type { IndicatorType } from '@/lib/schemas/chartCommand'
 import { describeCondition } from '@/lib/chart/describe'
 import { useT } from '@/stores/localeStore'
 
-/** Types whose period is edited inline — their badge drops the period from the label. */
-const EDITABLE: Record<string, string> = {
-  SMA: 'SMA',
-  EMA: 'EMA',
-  RSI: 'RSI',
-  ATR: 'ATR',
-  BOLLINGER: 'BB',
-  VOLUME_SMA: 'Vol SMA',
-  VOLATILITY: 'Volatility',
+/**
+ * A single-knob indicator gets its period edited inline, so the badge shows the
+ * short name plus an input. Anything with several parameters shows a full label.
+ */
+function inlineEditable(type: IndicatorType): string | null {
+  const spec = indicatorSpec(type)
+  return spec.params.length === 1 && spec.params[0]?.key === 'period' ? spec.short : null
 }
 
 export function IndicatorBadges() {
@@ -36,8 +36,8 @@ export function IndicatorBadges() {
           className="group flex items-center gap-1.5 rounded border border-line bg-raised py-0.5 pr-1 pl-1.5 text-[11px] text-muted"
         >
           <span className="h-[2px] w-2.5 rounded-full" style={{ background: def.color }} />
-          {EDITABLE[def.type] ?? indicatorLabel(def)}
-          {EDITABLE[def.type] ? (
+          {inlineEditable(def.type) ?? indicatorLabel(def)}
+          {inlineEditable(def.type) ? (
             <input
               type="number"
               min={1}

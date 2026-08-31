@@ -71,6 +71,42 @@ export const COMMAND_CATALOGUE: CatalogueGroup[] = [
         produces: 'ADD_INDICATOR',
       },
       {
+        id: 'stoch',
+        prompt: { ko: '스토캐스틱 추가', en: 'add the Stochastic' },
+        effect: { ko: '%K / %D 전용 패널', en: 'A %K / %D pane' },
+        produces: 'ADD_INDICATOR',
+      },
+      {
+        id: 'supertrend',
+        prompt: { ko: '슈퍼트렌드 추가', en: 'add SuperTrend' },
+        effect: { ko: 'ATR 추세 추종선을 겹쳐 그립니다', en: 'Overlays the ATR trend-following line' },
+        produces: 'ADD_INDICATOR',
+      },
+      {
+        id: 'ichimoku',
+        prompt: { ko: '일목균형표 보여줘', en: 'show the Ichimoku cloud' },
+        effect: { ko: '전환선·기준선·선행스팬', en: 'Tenkan, kijun and both spans' },
+        produces: 'ADD_INDICATOR',
+      },
+      {
+        id: 'adx',
+        prompt: { ko: 'ADX 추가해서 추세 강도 보여줘', en: 'add ADX to show trend strength' },
+        effect: { ko: 'ADX와 +DI / −DI', en: 'ADX with +DI and -DI' },
+        produces: 'ADD_INDICATOR',
+      },
+      {
+        id: 'obv',
+        prompt: { ko: 'OBV 추가', en: 'add OBV' },
+        effect: { ko: '누적 거래량 흐름', en: 'Cumulative volume flow' },
+        produces: 'ADD_INDICATOR',
+      },
+      {
+        id: 'keltner',
+        prompt: { ko: '켈트너 채널 추가', en: 'add Keltner Channels' },
+        effect: { ko: 'ATR 기반 채널', en: 'ATR-scaled envelope' },
+        produces: 'ADD_INDICATOR',
+      },
+      {
         id: 'removeIndicator',
         prompt: { ko: '20일선 제거해', en: 'remove the 20 day moving average' },
         effect: { ko: '해당 지표만 차트에서 뺍니다', en: 'Takes just that indicator off the chart' },
@@ -183,6 +219,27 @@ export const COMMAND_CATALOGUE: CatalogueGroup[] = [
           en: 'show closes below the lower Bollinger band',
         },
         effect: { ko: '밴드도 함께 차트에 올라갑니다', en: 'Adds the bands to the chart as well' },
+        produces: 'CREATE_SIGNAL',
+      },
+      {
+        id: 'stochCross',
+        prompt: {
+          ko: '스토캐스틱이 20 아래에서 위로 올라온 날 표시',
+          en: 'mark where the Stochastic crosses back above 20',
+        },
+        effect: { ko: '과매도 탈출 지점', en: 'Exits from oversold' },
+        produces: 'CREATE_SIGNAL',
+      },
+      {
+        id: 'mfiOversold',
+        prompt: { ko: 'MFI 20 이하인 날 표시', en: 'mark days when MFI is below 20' },
+        effect: { ko: '거래량까지 반영한 과매도', en: 'Oversold with volume taken into account' },
+        produces: 'CREATE_SIGNAL',
+      },
+      {
+        id: 'adxStrong',
+        prompt: { ko: 'ADX가 25 넘는 구간 표시', en: 'mark where ADX is above 25' },
+        effect: { ko: '추세가 강한 구간', en: 'Where the trend is strong' },
         produces: 'CREATE_SIGNAL',
       },
       {

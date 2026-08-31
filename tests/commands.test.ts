@@ -56,7 +56,7 @@ describe('ChartCommandSchema', () => {
 
   it('rejects an unsupported indicator', () => {
     expect(
-      ChartCommandSchema.safeParse({ type: 'ADD_INDICATOR', indicator: 'ICHIMOKU' }).success,
+      ChartCommandSchema.safeParse({ type: 'ADD_INDICATOR', indicator: 'NOT_AN_INDICATOR' }).success,
     ).toBe(false)
   })
 

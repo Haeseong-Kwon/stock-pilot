@@ -1,7 +1,10 @@
 import { z } from 'zod'
+import { INDICATOR_TYPES, type IndicatorType } from '@/lib/analysis/indicators/registry'
+import { IndicatorParamsSchema, type IndicatorParams } from './indicatorParams'
+import { PRICE_SOURCES as SOURCES, type PriceSource } from './priceSource'
 
-export const PRICE_SOURCES = ['OPEN', 'HIGH', 'LOW', 'CLOSE', 'VOLUME'] as const
-export type PriceSource = (typeof PRICE_SOURCES)[number]
+export { PRICE_SOURCES } from './priceSource'
+export type { PriceSource } from './priceSource'
 
 export const COMPARE_OPERATORS = ['>', '>=', '<', '<=', '==', '!='] as const
 export type CompareOperator = (typeof COMPARE_OPERATORS)[number]
@@ -23,6 +26,11 @@ export type Expression =
   | { type: 'ABS'; value: Operand }
   /** The value this expression had `bars` bars ago. Null before that. */
   | { type: 'LAG'; value: Operand; bars: number }
+  /**
+   * Any indicator in the registry. `output` picks one of its series
+   * (e.g. STOCH has `k` and `d`); the first output is used when omitted.
+   */
+  | { type: 'INDICATOR'; name: IndicatorType; params?: IndicatorParams; output?: string }
 
 /** Anywhere an expression is accepted, a bare number is too. */
 export type Operand = Expression | number
@@ -35,7 +43,7 @@ export type Condition =
   | { type: 'CROSS_ABOVE'; left: Operand; right: Operand }
   | { type: 'CROSS_BELOW'; left: Operand; right: Operand }
 
-const priceSource = z.enum(PRICE_SOURCES)
+const priceSource = z.enum(SOURCES)
 
 export const OperandSchema: z.ZodType<Operand> = z.lazy(() =>
   z.union([z.number(), ExpressionSchema]),
@@ -84,6 +92,12 @@ export const ExpressionSchema: z.ZodType<Expression> = z.lazy(() =>
       type: z.literal('LAG'),
       value: OperandSchema,
       bars: z.number().int().positive().max(500),
+    }),
+    z.object({
+      type: z.literal('INDICATOR'),
+      name: z.enum(INDICATOR_TYPES),
+      params: IndicatorParamsSchema.optional(),
+      output: z.string().max(32).optional(),
     }),
   ]),
 )

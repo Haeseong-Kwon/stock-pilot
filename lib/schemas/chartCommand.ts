@@ -1,30 +1,14 @@
 import { z } from 'zod'
 import { TIMEFRAMES } from '@/lib/types'
+import { INDICATOR_TYPES as REGISTRY_TYPES } from '@/lib/analysis/indicators/registry'
 import { ConditionSchema } from './expression'
+import { IndicatorParamsSchema as SharedIndicatorParams } from './indicatorParams'
 
-export const INDICATOR_TYPES = [
-  'SMA',
-  'EMA',
-  'RSI',
-  'MACD',
-  'BOLLINGER',
-  'ATR',
-  'VOLUME_SMA',
-  'VOLATILITY',
-] as const
-export type IndicatorType = (typeof INDICATOR_TYPES)[number]
+export { INDICATOR_TYPES } from '@/lib/analysis/indicators/registry'
+export type { IndicatorType } from '@/lib/analysis/indicators/registry'
 
-export const IndicatorParamsSchema = z
-  .object({
-    period: z.number().int().positive().max(1000).optional(),
-    fast: z.number().int().positive().max(1000).optional(),
-    slow: z.number().int().positive().max(1000).optional(),
-    signal: z.number().int().positive().max(1000).optional(),
-    stdDev: z.number().positive().max(10).optional(),
-    source: z.enum(['OPEN', 'HIGH', 'LOW', 'CLOSE', 'VOLUME']).optional(),
-  })
-  .strict()
-export type IndicatorParams = z.infer<typeof IndicatorParamsSchema>
+export { IndicatorParamsSchema } from './indicatorParams'
+export type { IndicatorParams } from './indicatorParams'
 
 /**
  * A date reference: an ISO date (`2024-01-01`), `now`, or a relative offset
@@ -45,18 +29,18 @@ export const ChartCommandSchema = z.union([
   z.object({ type: z.literal('SET_TIMEFRAME'), timeframe: z.enum(TIMEFRAMES) }),
   z.object({
     type: z.literal('ADD_INDICATOR'),
-    indicator: z.enum(INDICATOR_TYPES),
-    params: IndicatorParamsSchema.optional(),
+    indicator: z.enum(REGISTRY_TYPES),
+    params: SharedIndicatorParams.optional(),
   }),
   z.object({
     type: z.literal('REMOVE_INDICATOR'),
-    indicator: z.enum(INDICATOR_TYPES),
-    params: IndicatorParamsSchema.optional(),
+    indicator: z.enum(REGISTRY_TYPES),
+    params: SharedIndicatorParams.optional(),
   }),
   z.object({
     type: z.literal('UPDATE_INDICATOR'),
-    indicator: z.enum(INDICATOR_TYPES),
-    params: IndicatorParamsSchema,
+    indicator: z.enum(REGISTRY_TYPES),
+    params: SharedIndicatorParams,
   }),
   z.object({
     type: z.literal('CREATE_SIGNAL'),

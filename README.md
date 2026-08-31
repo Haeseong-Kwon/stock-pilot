@@ -129,11 +129,19 @@ When live data cannot be fetched, the app serves deterministic synthetic candles
 
 ```bash
 npm run dev         # dev server
-npm run build       # production build
+npm run build       # production build (writes .next)
 npm run lint        # eslint
 npm run typecheck   # tsc --noEmit
 npm test            # vitest — 205 unit tests
 npm run test:e2e    # playwright browser smoke test (needs a running server)
+```
+
+`next build` and `next dev` share `.next`, so building while the dev server is up corrupts its
+chunks (`__webpack_modules__[moduleId] is not a function`). To verify a build without stopping
+`npm run dev`, send it somewhere else:
+
+```bash
+NEXT_DIST_DIR=.next-verify npm run build
 ```
 
 ## Known limitations

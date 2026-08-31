@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { LOCALES, MESSAGES, isLocale, translator, type MessageKey } from '@/lib/i18n/messages'
 import { parseLocally } from '@/lib/ai/localParser'
 import type { ChartContext } from '@/lib/ai/context'
-import { ChatRequestSchema } from '@/lib/ai/context'
+import {
+  ChartContextSchema,
+  ChatRequestSchema,
+  MAX_CONTEXT_INDICATORS,
+  MAX_CONTEXT_SIGNALS,
+  buildChartContext,
+} from '@/lib/ai/context'
 
 const context: ChartContext = {
   symbol: 'BTCUSDT',
@@ -86,5 +92,79 @@ describe('demo parser replies follow the locale, not the input language', () => 
     const ko = parseLocally('최근 1년간 5% 이상 떨어진 날 표시해', context, 'ko')
     const en = parseLocally('최근 1년간 5% 이상 떨어진 날 표시해', context, 'en')
     expect(ko.commands).toEqual(en.commands)
+  })
+})
+
+describe('chat context stays within the request schema', () => {
+  const candles = Array.from({ length: 500 }, (_, i) => ({
+    time: 1_700_000_000 + i * 86400,
+    open: 100,
+    high: 101,
+    low: 99,
+    close: 100 + i,
+    volume: 1000,
+  }))
+  const condition = {
+    type: 'COMPARE' as const,
+    left: { type: 'CLOSE' as const },
+    operator: '>' as const,
+    right: 1,
+  }
+
+  it('truncates a long signal list instead of producing an invalid request', () => {
+    const signals = Array.from({ length: 25 }, (_, i) => ({ name: `s${i}`, condition }))
+    const built = buildChartContext({
+      symbol: 'BTCUSDT',
+      timeframe: '1D',
+      candles,
+      indicators: Array.from({ length: 40 }, () => ({ type: 'SMA' as const, params: { period: 20 } })),
+      signals,
+    })
+
+    expect(built.signals).toHaveLength(MAX_CONTEXT_SIGNALS)
+    expect(built.indicators).toHaveLength(MAX_CONTEXT_INDICATORS)
+    expect(ChartContextSchema.safeParse(built).success).toBe(true)
+    expect(
+      ChatRequestSchema.safeParse({ messages: [{ role: 'user', content: 'hi' }], context: built })
+        .success,
+    ).toBe(true)
+  })
+
+  it('keeps the most recent signals, which is what a follow-up refers to', () => {
+    const signals = Array.from({ length: 12 }, (_, i) => ({ name: `s${i}`, condition }))
+    const built = buildChartContext({
+      symbol: 'BTCUSDT',
+      timeframe: '1D',
+      candles,
+      indicators: [],
+      signals,
+    })
+    expect(built.signals.at(-1)?.name).toBe('s11')
+    expect(built.signals[0]?.name).toBe('s2')
+  })
+
+  it('carries the loaded bar range', () => {
+    const built = buildChartContext({
+      symbol: 'AAPL',
+      timeframe: '1D',
+      candles,
+      indicators: [],
+      signals: [],
+    })
+    expect(built.barCount).toBe(500)
+    expect(built.lastPrice).toBe(candles.at(-1)?.close)
+    expect(built.firstBarDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('tolerates an empty chart', () => {
+    const built = buildChartContext({
+      symbol: 'BTCUSDT',
+      timeframe: '1D',
+      candles: [],
+      indicators: [],
+      signals: [],
+    })
+    expect(built.barCount).toBe(0)
+    expect(ChartContextSchema.safeParse(built).success).toBe(true)
   })
 })

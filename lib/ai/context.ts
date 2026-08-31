@@ -1,8 +1,9 @@
 import { z } from 'zod'
-import { TIMEFRAMES } from '@/lib/types'
+import { TIMEFRAMES, type Candle, type Timeframe } from '@/lib/types'
 import { LOCALES } from '@/lib/i18n/messages'
-import { ConditionSchema } from '@/lib/schemas/expression'
-import { INDICATOR_TYPES, IndicatorParamsSchema } from '@/lib/schemas/chartCommand'
+import { ConditionSchema, type Condition } from '@/lib/schemas/expression'
+import { INDICATOR_TYPES, IndicatorParamsSchema, type IndicatorParams, type IndicatorType } from '@/lib/schemas/chartCommand'
+import { formatDate } from '@/lib/format'
 
 /** The compact chart snapshot the model reasons over. Raw candles are never sent. */
 export const ChartContextSchema = z.object({
@@ -33,3 +34,39 @@ export const ChatRequestSchema = z.object({
   locale: z.enum(LOCALES).default('ko'),
 })
 export type ChatRequest = z.infer<typeof ChatRequestSchema>
+
+export const MAX_CONTEXT_INDICATORS = 20
+export const MAX_CONTEXT_SIGNALS = 10
+
+type ContextInput = {
+  symbol: string
+  timeframe: Timeframe
+  candles: Candle[]
+  indicators: Array<{ type: IndicatorType; params: IndicatorParams }>
+  signals: Array<{ name: string; condition: Condition }>
+}
+
+/**
+ * Builds the snapshot sent with a chat request. Keeps only the most recent
+ * indicators and signals: the schema caps them, and a follow-up like
+ * "narrow that one" always refers to the latest signal anyway.
+ */
+export function buildChartContext({
+  symbol,
+  timeframe,
+  candles,
+  indicators,
+  signals,
+}: ContextInput): ChartContext {
+  const first = candles[0]
+  const last = candles[candles.length - 1]
+  return {
+    symbol,
+    timeframe,
+    barCount: candles.length,
+    ...(first ? { firstBarDate: formatDate(first.time) } : {}),
+    ...(last ? { lastBarDate: formatDate(last.time), lastPrice: last.close } : {}),
+    indicators: indicators.slice(-MAX_CONTEXT_INDICATORS),
+    signals: signals.slice(-MAX_CONTEXT_SIGNALS),
+  }
+}

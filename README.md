@@ -41,6 +41,11 @@ plus a rule-based intent parser that covers the documented example commands.
 English works too (`mark days that dropped more than 5% in the last year`) — the parser is
 bilingual regardless of which interface language is selected.
 
+Don't want to type? **Command gallery** in the AI panel header lists all 30 supported commands,
+grouped and searchable, each one click away. `tests/catalogue.test.ts` runs every entry through
+the parser and the executor in both languages, so a row can never advertise something the app
+no longer does.
+
 ## Language
 
 The interface ships in **Korean by default**, switchable to English from the ⓘ button in the top
@@ -64,7 +69,7 @@ language relabels the existing conversation instead of leaving stale strings beh
 | `lib/analysis/signals/` | the condition DSL evaluator, crossovers, support/resistance |
 | `lib/schemas/` | Zod schemas for the expression DSL and for every chart command |
 | `lib/chart/` | command executor, indicator defaults, plot builders, condition descriptions |
-| `lib/ai/` | provider layer, system prompt, demo-mode rule parser |
+| `lib/ai/` | provider layer, system prompt, demo-mode rule parser, command catalogue |
 | `lib/i18n/` | message catalogue (ko/en) and the tiny interpolating translator |
 | `stores/` | Zustand slices for chart state, conversation state and locale |
 | `app/api/` | market data and AI endpoints (all external calls happen server-side) |
@@ -127,7 +132,7 @@ npm run dev         # dev server
 npm run build       # production build
 npm run lint        # eslint
 npm run typecheck   # tsc --noEmit
-npm test            # vitest — 108 unit tests
+npm test            # vitest — 205 unit tests
 npm run test:e2e    # playwright browser smoke test (needs a running server)
 ```
 
@@ -139,6 +144,8 @@ npm run test:e2e    # playwright browser smoke test (needs a running server)
   signals). Raw candles are never uploaded.
 - Signal match counts reported in chat are computed against the candles loaded at that moment; if a
   command also switches symbol, the chart re-evaluates but the chat line keeps the older count.
+- `UPDATE_INDICATOR` is the one command the demo parser does not emit (it collides with the
+  "RSI 30" threshold rule); edit a period inline on its chart badge instead.
 - No backtesting, no order routing, no portfolio. The command/executor split is designed to make
   backtesting an additive change, but it is not implemented.
 - Desktop-first (≥1440px). The layout degrades gracefully but is not optimised for mobile.

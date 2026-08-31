@@ -1,15 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, Eraser } from 'lucide-react'
+import { ArrowUp, Eraser, LayoutGrid } from 'lucide-react'
 import type { Candle } from '@/lib/types'
 import { AiResponseSchema } from '@/lib/schemas/chartCommand'
+import { buildChartContext } from '@/lib/ai/context'
 import { executeCommands } from '@/lib/chart/commandExecutor'
-import { formatDate } from '@/lib/format'
 import { useAiStore } from '@/stores/aiStore'
 import { useChartStore } from '@/stores/chartStore'
 import { useLocaleStore, useT } from '@/stores/localeStore'
 import { ChatMessage } from './ChatMessage'
+import { CommandGallery } from './CommandGallery'
 import { PromptSuggestions } from './PromptSuggestions'
 
 export function AIChatPanel({ candles }: { candles: Candle[] }) {
@@ -21,6 +22,7 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
   const t = useT()
 
   const [draft, setDraft] = useState('')
+  const [galleryOpen, setGalleryOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const candlesRef = useRef(candles)
   candlesRef.current = candles
@@ -40,8 +42,6 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
 
       const chart = useChartStore.getState()
       const bars = candlesRef.current
-      const first = bars[0]
-      const last = bars[bars.length - 1]
 
       try {
         const response = await fetch('/api/ai/chat', {
@@ -53,15 +53,13 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
               .getState()
               .messages.slice(-12)
               .map((m) => ({ role: m.role, content: m.content })),
-            context: {
+            context: buildChartContext({
               symbol: chart.symbol,
               timeframe: chart.timeframe,
-              barCount: bars.length,
-              ...(first ? { firstBarDate: formatDate(first.time) } : {}),
-              ...(last ? { lastBarDate: formatDate(last.time), lastPrice: last.close } : {}),
+              candles: bars,
               indicators: chart.indicators.map((i) => ({ type: i.type, params: i.params })),
               signals: chart.signals.map((s) => ({ name: s.name, condition: s.condition })),
-            },
+            }),
           }),
         })
 
@@ -117,16 +115,27 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
         <span className="rounded border border-line px-1.5 py-0.5 text-[10px] text-faint">
           {t('ai.subtitle')}
         </span>
-        {messages.length > 0 ? (
+        <div className="ml-auto flex items-center gap-1">
           <button
             type="button"
-            onClick={reset}
-            aria-label={t('ai.clear')}
-            className="ml-auto rounded p-1 text-faint transition-colors hover:text-text"
+            onClick={() => setGalleryOpen(true)}
+            aria-label={t('gallery.open')}
+            className="flex items-center gap-1.5 rounded border border-line px-1.5 py-1 text-[10.5px] text-muted transition-colors hover:border-accent/40 hover:text-text"
           >
-            <Eraser className="h-3.5 w-3.5" />
+            <LayoutGrid className="h-3 w-3" />
+            {t('gallery.open')}
           </button>
-        ) : null}
+          {messages.length > 0 ? (
+            <button
+              type="button"
+              onClick={reset}
+              aria-label={t('ai.clear')}
+              className="rounded p-1 text-faint transition-colors hover:text-text"
+            >
+              <Eraser className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3">
@@ -134,6 +143,14 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
           <div className="pt-6 text-[12px] leading-relaxed text-muted">
             <p className="text-text">{t('ai.empty.title')}</p>
             <p className="mt-1.5 text-faint">{t('ai.empty.body')}</p>
+            <button
+              type="button"
+              onClick={() => setGalleryOpen(true)}
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-line bg-raised px-2.5 py-1.5 text-[11.5px] text-muted transition-colors hover:border-accent/40 hover:text-text"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              {t('gallery.open')}
+            </button>
           </div>
         ) : null}
         {messages.map((entry) => (
@@ -148,6 +165,8 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
       </div>
 
       {messages.length === 0 ? <PromptSuggestions onPick={send} /> : null}
+
+      <CommandGallery open={galleryOpen} onClose={() => setGalleryOpen(false)} onPick={send} />
 
       <form
         onSubmit={(event) => {

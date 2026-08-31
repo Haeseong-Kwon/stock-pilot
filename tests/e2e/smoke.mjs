@@ -45,6 +45,33 @@ check('legend shows OHLC', await page.locator('text=/O\\s[\\d,.]+/').first().isV
 check('UI defaults to Korean', await page.getByText('AI 애널리스트').isVisible())
 check('Korean prompt chips shown', (await page.getByRole('button', { name: /표시해|찾아줘/ }).count()) > 0)
 
+// --- the command gallery runs everything the demo supports, by click ---
+await page.getByLabel('명령 갤러리').first().click()
+await page.waitForSelector('[role="dialog"]')
+const galleryRows = await page.locator('[role="dialog"] li button').count()
+check('gallery lists every demo command', galleryRows >= 25, `${galleryRows} rows`)
+await page.fill('[role="dialog"] input', '볼린저')
+await page.waitForTimeout(200)
+const filtered = await page.locator('[role="dialog"] li button').count()
+check('gallery search filters', filtered > 0 && filtered < galleryRows, `${galleryRows} -> ${filtered}`)
+// Read the declared command type off the row itself rather than hard-coding it.
+const firstRow = page.locator('[role="dialog"] li button').first()
+const declared = await firstRow.evaluate((el) => {
+  const badge = [...el.querySelectorAll('span')].find((s) => /^[A-Z_]+$/.test(s.textContent?.trim() ?? ''))
+  return badge?.textContent?.trim() ?? '?'
+})
+const cardsBefore = await page.getByText(declared, { exact: true }).count()
+await firstRow.click()
+await page.waitForTimeout(1800)
+check('gallery closes after a pick', (await page.locator('[role="dialog"]').count()) === 0)
+const cardsAfter = await page.getByText(declared, { exact: true }).count()
+check(
+  'gallery click runs the declared command',
+  cardsAfter > cardsBefore - galleryRows,
+  `${declared}: ${cardsAfter} result card(s)`,
+)
+await send('전부 지워')
+
 const baseline = await canvases()
 await send('add RSI')
 check('RSI pane added', (await canvases()) > baseline, `${baseline} -> ${await canvases()}`)

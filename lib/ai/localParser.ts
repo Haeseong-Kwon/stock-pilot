@@ -115,7 +115,10 @@ function collectFragments(text: string): Fragment[] {
     })
   }
 
-  if (/거래량|volume/i.test(text) && /터진|터졌|급증|폭증|많|spike|spiked|surge|배|x\b|times|이상|above/i.test(text)) {
+  if (
+    /거래량|volume/i.test(text) &&
+    /터진|터졌|급증|폭증|많|spike|spiked|surge|배|x\b|times|이상|above|double|twice/i.test(text)
+  ) {
     const multiplier = detectMultiplier(text)
     fragments.push({
       condition: {
@@ -237,8 +240,22 @@ function collectIndicators(text: string, removing: boolean): ChartCommand[] {
     commands.push({ type, indicator: 'BOLLINGER' })
   }
   if (/\batr\b|변동성\s*지표/i.test(text)) commands.push({ type, indicator: 'ATR' })
+  if (/거래량\s*(?:이동\s*)?평균|volume\s*(?:sma|average|ma)\b/i.test(text)) {
+    commands.push({ type, indicator: 'VOLUME_SMA' })
+  }
 
   return commands
+}
+
+const PRICE_LINE_BEFORE = /([\d][\d,]*(?:\.\d+)?)\s*(?:에|에다)?\s*(?:가격선|수평선)/i
+const PRICE_LINE_AFTER = /(?:price\s*line|horizontal\s*line)[^0-9]{0,16}([\d][\d,]*(?:\.\d+)?)/i
+
+/** Reads the price out of "77000에 가격선" or "draw a price line at 77000". */
+function detectPriceLine(text: string): number | null {
+  const match = PRICE_LINE_BEFORE.exec(text) ?? PRICE_LINE_AFTER.exec(text)
+  if (!match?.[1]) return null
+  const value = Number(match[1].replace(/,/g, ''))
+  return Number.isFinite(value) && value > 0 ? value : null
 }
 
 function dedupe(commands: ChartCommand[]): ChartCommand[] {
@@ -283,11 +300,19 @@ export function parseLocally(
     }
   }
 
-  // Explicit date window -> zoom
+  // An explicit date window either zooms the chart or shades the stretch.
   const dates = detectDates(text)
-  if (dates.length >= 2 && /부터|까지|~|from|to|between|사이/i.test(text)) {
-    commands.push({ type: 'ZOOM_RANGE', from: dates[0] as string, to: dates[1] as string })
+  if (dates.length >= 2) {
+    const [from, to] = dates as [string, string]
+    if (/강조|하이라이트|highlight|shade/i.test(text)) {
+      commands.push({ type: 'HIGHLIGHT_RANGE', from, to })
+    } else if (/부터|까지|~|from|to|between|사이/i.test(text)) {
+      commands.push({ type: 'ZOOM_RANGE', from, to })
+    }
   }
+
+  const priceLine = detectPriceLine(text)
+  if (priceLine !== null) commands.push({ type: 'ADD_PRICE_LINE', price: priceLine })
 
   if (/지지선|저항선|지지\/저항|지지|저항|support|resistance/i.test(text)) {
     const range = detectRange(text)

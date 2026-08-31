@@ -27,6 +27,7 @@ export function CommandResultList({ results }: { results: CommandResult[] }) {
         return (
           <li
             key={`${result.type}-${index}`}
+            data-command-result={result.type}
             className="rounded-md border border-line bg-base/60 px-2.5 py-2 text-[11px]"
           >
             <div className="flex items-center gap-1.5">

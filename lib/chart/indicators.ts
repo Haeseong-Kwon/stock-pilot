@@ -15,6 +15,7 @@ const DEFAULTS: Record<IndicatorType, IndicatorParams> = {
   BOLLINGER: { period: 20, stdDev: 2 },
   ATR: { period: 14 },
   VOLUME_SMA: { period: 20 },
+  VOLATILITY: { period: 20 },
 }
 
 const PALETTE = ['#4a9eff', '#f0b429', '#a78bfa', '#34d399', '#fb7185', '#22d3ee', '#f97316']
@@ -61,6 +62,8 @@ export function indicatorLabel(def: IndicatorDef): string {
       return `BB ${p.period}, ${p.stdDev}σ`
     case 'VOLUME_SMA':
       return `Vol SMA ${p.period}`
+    case 'VOLATILITY':
+      return `Volatility ${p.period}`
     default:
       return `${def.type} ${p.period}`
   }

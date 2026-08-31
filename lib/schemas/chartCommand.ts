@@ -10,6 +10,7 @@ export const INDICATOR_TYPES = [
   'BOLLINGER',
   'ATR',
   'VOLUME_SMA',
+  'VOLATILITY',
 ] as const
 export type IndicatorType = (typeof INDICATOR_TYPES)[number]
 
@@ -100,6 +101,15 @@ export const ChartCommandSchema = z.union([
 
 export type ChartCommand = z.infer<typeof ChartCommandSchema>
 export type ChartCommandType = ChartCommand['type']
+
+/**
+ * The envelope only. Commands are validated one by one so a single malformed
+ * command cannot discard the valid ones alongside it.
+ */
+export const AiEnvelopeSchema = z.object({
+  reply: z.string().max(2000),
+  commands: z.array(z.unknown()).max(12).default([]),
+})
 
 export const AiResponseSchema = z.object({
   reply: z.string().max(2000),

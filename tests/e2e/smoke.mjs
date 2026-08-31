@@ -23,10 +23,21 @@ page.on('pageerror', (e) => errors.push(String(e)))
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
 
 const canvases = () => page.locator('canvas').count()
+const resultCards = () => page.locator('[data-command-result]').count()
+const signalBadges = () => page.locator('[data-signal-badge]').count()
+// Waits for the in-flight request to finish. The demo parser answers instantly,
+// a live LLM can take 15s+ — a fixed sleep cannot serve both. The spinner has to
+// be seen appearing first: waiting only for "detached" resolves immediately.
+const spinner = () => page.getByText(/해석하는 중…|Interpreting…/)
+const settle = async () => {
+  await spinner().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
+  await spinner().waitFor({ state: 'detached', timeout: 90_000 }).catch(() => {})
+  await page.waitForTimeout(600)
+}
 const send = async (prompt) => {
   await page.fill('textarea', prompt)
   await page.keyboard.press('Enter')
-  await page.waitForTimeout(1800)
+  await settle()
 }
 const setLanguage = async (name) => {
   await page.getByLabel(/설정 및 정보|Settings and about/).click()
@@ -50,6 +61,7 @@ await page.getByLabel('명령 갤러리').first().click()
 await page.waitForSelector('[role="dialog"]')
 const galleryRows = await page.locator('[role="dialog"] li button').count()
 check('gallery lists every demo command', galleryRows >= 25, `${galleryRows} rows`)
+const cardsBeforeGallery = await resultCards()
 await page.fill('[role="dialog"] input', '볼린저')
 await page.waitForTimeout(200)
 const filtered = await page.locator('[role="dialog"] li button').count()
@@ -60,15 +72,14 @@ const declared = await firstRow.evaluate((el) => {
   const badge = [...el.querySelectorAll('span')].find((s) => /^[A-Z_]+$/.test(s.textContent?.trim() ?? ''))
   return badge?.textContent?.trim() ?? '?'
 })
-const cardsBefore = await page.getByText(declared, { exact: true }).count()
 await firstRow.click()
-await page.waitForTimeout(1800)
+await settle()
 check('gallery closes after a pick', (await page.locator('[role="dialog"]').count()) === 0)
-const cardsAfter = await page.getByText(declared, { exact: true }).count()
+const cardsAfterGallery = await resultCards()
 check(
-  'gallery click runs the declared command',
-  cardsAfter > cardsBefore - galleryRows,
-  `${declared}: ${cardsAfter} result card(s)`,
+  'gallery click runs a command',
+  cardsAfterGallery > cardsBeforeGallery,
+  `${declared}: ${cardsBeforeGallery} -> ${cardsAfterGallery} result cards`,
 )
 await send('전부 지워')
 
@@ -81,9 +92,14 @@ await send('mark days that dropped more than 5% in the last year')
 const matched = await page.locator('text=/\\d+건 일치/').first().textContent()
 check('signal reported matches in Korean', /[1-9]/.test(matched ?? ''), matched ?? 'none')
 
+const badgesBefore = await signalBadges()
 await send('그중 거래량이 두 배 이상 터진 것만 남겨')
 const narrowed = await page.locator('text=/\\d+건 일치/').last().textContent()
-check('signal narrowed in place', (await page.locator('[aria-label^="Drop"]').count()) === 1, narrowed ?? '')
+check(
+  'signal narrowed in place, not duplicated',
+  (await signalBadges()) === badgesBefore,
+  `${badgesBefore} badge(s), ${narrowed ?? '?'}`,
+)
 
 await send('최근 6개월 지지선과 저항선 찾아줘')
 check('support/resistance found', (await page.getByText('지지 · 저항').count()) > 0)
@@ -108,7 +124,7 @@ check('language persists after reload', await page.getByText('AI Analyst').isVis
 // --- back to Korean, and clearing keeps the candles ---
 await setLanguage('한국어')
 await send('전부 지워')
-check('annotations cleared', (await page.locator('[aria-label^="Drop"]').count()) === 0)
+check('annotations cleared', (await page.locator('[data-signal-badge]').count()) === 0)
 check('candles survive the clear', (await canvases()) > 0)
 
 check('no uncaught page errors', errors.length === 0, errors.slice(0, 3).join(' | '))

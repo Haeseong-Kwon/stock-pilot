@@ -20,6 +20,7 @@ const PRESETS: Preset[] = [
   { label: 'Bollinger 20, 2σ', hint: 'indicators.hint.bollinger', type: 'BOLLINGER' },
   { label: 'ATR 14', hint: 'indicators.hint.atr', type: 'ATR' },
   { label: 'Volume SMA 20', hint: 'indicators.hint.volumeSma', type: 'VOLUME_SMA' },
+  { label: 'Volatility 20', hint: 'indicators.hint.volatility', type: 'VOLATILITY' },
 ]
 
 export function IndicatorMenu() {

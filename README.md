@@ -98,13 +98,41 @@ plus `ADD SUBTRACT MULTIPLY DIVIDE ABS`. Returns are fractions (`-0.05`, not `-5
 
 ## AI providers
 
-Set `LLM_PROVIDER` and the matching key in `.env.local`. If none is set, Demo Mode is used.
+```bash
+cp .env.example .env.local   # then paste your key
+```
+
+If no key is set, Demo Mode is used. `.env.local` is gitignored.
 
 | `LLM_PROVIDER` | Key | Model variable (default) |
 | --- | --- | --- |
-| `openai` | `OPENAI_API_KEY` | `OPENAI_MODEL` (`gpt-4o-mini`) |
-| `anthropic` | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` (`claude-sonnet-5`) |
-| `openrouter` | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` |
+| `openrouter` **(default)** | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` (`z-ai/glm-5.3-flash`) |
+| `openai` | `OPENAI_API_KEY` | `OPENAI_MODEL` (`gpt-5-nano`) |
+| `anthropic` | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` (`claude-haiku-4-5`) |
+
+**Why GLM 5.3 Flash by default:** this is constrained translation into a fixed grammar, not
+open-ended reasoning — the DSL is spelled out in the prompt and every response is Zod-validated
+before anything touches the chart. At $0.075/$0.25 per 1M tokens the workload (~1.5K in, ~0.3K out)
+costs about **$0.0002 per request** — roughly 16× cheaper than Claude Haiku 4.5 and 32× cheaper
+than Sonnet 5 for the same job. Swap `OPENROUTER_MODEL` for any other id to compare.
+
+No `temperature` is sent: several current models (`gpt-5-*`, `claude-sonnet-5`, `claude-opus-5`)
+reject the parameter outright, and schema validation makes it redundant here.
+
+**Reasoning effort.** GLM 5.3 Flash has mandatory reasoning that defaults to `max`, which is wildly
+overkill for translating one sentence into a typed command. Measured on the real prompt:
+
+| effort | latency | reasoning tokens | cost/request |
+| --- | --- | --- | --- |
+| `max` (provider default) | 22.1s | 1,124 | $0.00041 |
+| `high` | 7.6s | 70 | $0.00015 |
+| **`low` (what we send)** | **3.7s** | 24 | **$0.00014** |
+
+Override with `OPENROUTER_REASONING_EFFORT`. If you switch to a non-reasoning model the parameter
+is simply ignored.
+
+Commands are validated **one at a time**, so a single malformed command cannot discard the valid
+ones next to it; anything rejected is reported in the reply and never reaches the chart.
 
 Providers are plain `fetch` calls behind one `LlmProvider` interface (`lib/ai/provider.ts`); no
 vendor SDK leaks into the rest of the app. If the model returns something that fails Zod
@@ -132,7 +160,7 @@ npm run dev         # dev server
 npm run build       # production build (writes .next)
 npm run lint        # eslint
 npm run typecheck   # tsc --noEmit
-npm test            # vitest — 205 unit tests
+npm test            # vitest — 217 unit tests
 npm run test:e2e    # playwright browser smoke test (needs a running server)
 ```
 
@@ -153,7 +181,12 @@ NEXT_DIST_DIR=.next-verify npm run build
 - Signal match counts reported in chat are computed against the candles loaded at that moment; if a
   command also switches symbol, the chart re-evaluates but the chat line keeps the older count.
 - `UPDATE_INDICATOR` is the one command the demo parser does not emit (it collides with the
-  "RSI 30" threshold rule); edit a period inline on its chart badge instead.
+  "RSI 30" threshold rule); edit a period inline on its chart badge instead. With an LLM connected
+  it works normally.
+- LLM latency is variable — typically 3-6s, occasionally 15s+. The chart stays interactive
+  throughout, but there is no streaming or optimistic UI yet.
+- The DSL has no lag/offset or ranking operator, so "3 days in a row" and "the most volatile month"
+  cannot be expressed exactly. The model approximates the first and declines the second.
 - No backtesting, no order routing, no portfolio. The command/executor split is designed to make
   backtesting an additive change, but it is not implemented.
 - Desktop-first (≥1440px). The layout degrades gracefully but is not optimised for mobile.

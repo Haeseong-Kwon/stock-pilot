@@ -14,6 +14,7 @@ const EDITABLE: Record<string, string> = {
   ATR: 'ATR',
   BOLLINGER: 'BB',
   VOLUME_SMA: 'Vol SMA',
+  VOLATILITY: 'Volatility',
 }
 
 export function IndicatorBadges() {
@@ -31,6 +32,7 @@ export function IndicatorBadges() {
       {indicators.map((def) => (
         <span
           key={def.id}
+          data-indicator-badge=""
           className="group flex items-center gap-1.5 rounded border border-line bg-raised py-0.5 pr-1 pl-1.5 text-[11px] text-muted"
         >
           <span className="h-[2px] w-2.5 rounded-full" style={{ background: def.color }} />
@@ -65,6 +67,7 @@ export function IndicatorBadges() {
       {signals.map((signal) => (
         <span
           key={signal.id}
+          data-signal-badge=""
           title={describeCondition(signal.condition)}
           className="flex max-w-72 items-center gap-1.5 rounded border py-0.5 pr-1 pl-1.5 text-[11px]"
           style={{ borderColor: `${signal.color}55`, background: `${signal.color}14`, color: signal.color }}

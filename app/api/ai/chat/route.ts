@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { AiResponseSchema } from '@/lib/schemas/chartCommand'
+import { AiEnvelopeSchema, ChartCommandSchema, type ChartCommand } from '@/lib/schemas/chartCommand'
 import { ChatRequestSchema } from '@/lib/ai/context'
 import { buildContextMessage, SYSTEM_PROMPT } from '@/lib/ai/prompts'
 import { getLlmProvider } from '@/lib/ai/provider'
@@ -41,10 +41,9 @@ export async function POST(request: Request) {
       { role: 'assistant', content: '{"reply":"Understood — chart state noted.","commands":[]}' },
       ...messages,
     ])
-    const validated = AiResponseSchema.safeParse(raw)
-    if (!validated.success) {
-      console.error('[api/ai/chat] schema rejection:', validated.error.issues.slice(0, 3))
-      // The model produced something we cannot safely execute — never run it.
+    const envelope = AiEnvelopeSchema.safeParse(raw)
+    if (!envelope.success) {
+      console.error('[api/ai/chat] envelope rejection:', envelope.error.issues.slice(0, 3))
       const fallback = parseLocally(lastUser.content, context, locale)
       return NextResponse.json({
         ...fallback,
@@ -52,7 +51,35 @@ export async function POST(request: Request) {
         mode: 'fallback',
       })
     }
-    return NextResponse.json({ ...validated.data, mode: provider.id })
+
+    // Validate command by command: one malformed entry must not discard the rest.
+    const commands: ChartCommand[] = []
+    let dropped = 0
+    for (const candidate of envelope.data.commands) {
+      const parsed = ChartCommandSchema.safeParse(candidate)
+      if (parsed.success) {
+        commands.push(parsed.data)
+      } else {
+        dropped++
+        console.error('[api/ai/chat] dropped command:', parsed.error.issues[0]?.message, candidate)
+      }
+    }
+
+    // Everything the model asked for was invalid — try the rule-based parser instead.
+    if (commands.length === 0 && dropped > 0) {
+      const fallback = parseLocally(lastUser.content, context, locale)
+      return NextResponse.json({
+        ...fallback,
+        reply: fallback.commands.length > 0 ? fallback.reply : t('reply.invalid'),
+        mode: 'fallback',
+      })
+    }
+
+    return NextResponse.json({
+      reply: dropped > 0 ? `${envelope.data.reply} ${t('reply.partial', { count: dropped })}` : envelope.data.reply,
+      commands,
+      mode: provider.id,
+    })
   } catch (error) {
     console.error('[api/ai/chat]', error)
     const fallback = parseLocally(lastUser.content, context, locale)

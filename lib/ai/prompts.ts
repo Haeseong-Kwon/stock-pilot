@@ -17,7 +17,8 @@ If nothing about the chart should change, return an empty commands array and ans
 COMMANDS
 {"type":"SET_SYMBOL","symbol":"AAPL"}
 {"type":"SET_TIMEFRAME","timeframe":"1m|5m|15m|1h|4h|1D|1W"}
-{"type":"ADD_INDICATOR","indicator":"SMA|EMA|RSI|MACD|BOLLINGER|ATR|VOLUME_SMA","params":{"period":20}}
+{"type":"ADD_INDICATOR","indicator":"SMA|EMA|RSI|MACD|BOLLINGER|ATR|VOLUME_SMA|VOLATILITY","params":{"period":20}}
+  // "params" accepts ONLY these keys: period, fast, slow, signal, stdDev, source. No others.
 {"type":"REMOVE_INDICATOR","indicator":"SMA","params":{"period":20}}   // omit params to remove all of that type
 {"type":"UPDATE_INDICATOR","indicator":"RSI","params":{"period":21}}
 {"type":"CREATE_SIGNAL","name":"Large Drop","condition":<Condition>,"range":{"from":"-1y"},"visualization":{"color":"#ef4444","position":"belowBar"}}

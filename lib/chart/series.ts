@@ -1,5 +1,6 @@
 import type { Candle, Series } from '@/lib/types'
 import { atr, bollinger, ema, macd, rsi, sma } from '@/lib/analysis/indicators'
+import { volatility } from '@/lib/analysis/statistics/volatility'
 import type { IndicatorDef } from './indicators'
 import { indicatorLabel, isOverlay } from './indicators'
 
@@ -109,6 +110,19 @@ export function buildIndicatorPlot(candles: Candle[], def: IndicatorDef): Indica
         def,
         target: 'own',
         lines: [{ key: def.id, label, color: def.color, data: toPoints(candles, atr(candles, p.period ?? 14)) }],
+      }
+    case 'VOLATILITY':
+      return {
+        def,
+        target: 'own',
+        lines: [
+          {
+            key: def.id,
+            label,
+            color: def.color,
+            data: toPoints(candles, volatility(closes, p.period ?? 20)),
+          },
+        ],
       }
   }
 }

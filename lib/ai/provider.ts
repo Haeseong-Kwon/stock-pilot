@@ -50,6 +50,7 @@ function openAiCompatible(
   apiKey: string,
   model: string,
   extraHeaders: Record<string, string> = {},
+  extraBody: Record<string, unknown> = {},
 ): LlmProvider {
   return {
     id,
@@ -60,9 +61,9 @@ function openAiCompatible(
         { Authorization: `Bearer ${apiKey}`, ...extraHeaders },
         {
           model,
-          temperature: 0,
           response_format: { type: 'json_object' },
           messages: [{ role: 'system', content: system }, ...messages],
+          ...extraBody,
         },
       )) as OpenAiShape
       const content = payload.choices?.[0]?.message?.content
@@ -83,15 +84,13 @@ function anthropic(apiKey: string, model: string): LlmProvider {
         {
           model,
           max_tokens: 2048,
-          temperature: 0,
           system,
-          // Prefilling `{` is how we get strict JSON out of the Messages API.
-          messages: [...messages, { role: 'assistant', content: '{' }],
+          messages,
         },
       )) as AnthropicShape
       const content = payload.content?.[0]?.text
       if (!content) throw new LlmError('Empty response from model')
-      return extractJson(`{${content}`)
+      return extractJson(content)
     },
   }
 }
@@ -115,8 +114,12 @@ export function getLlmProvider(): LlmProvider | null {
             'openrouter',
             'https://openrouter.ai/api/v1/chat/completions',
             openrouterKey,
-            env('OPENROUTER_MODEL') ?? 'anthropic/claude-sonnet-4',
-            { 'X-Title': 'ChartPilot' },
+            env('OPENROUTER_MODEL') ?? 'z-ai/glm-5.3-flash',
+            { 'X-Title': 'ChartPilot', 'HTTP-Referer': 'https://github.com/Haeseong-Kwon/stock-pilot' },
+            // Reasoning models default to their deepest setting. Translating a
+            // sentence into a typed command does not need it: on GLM 5.3 Flash
+            // `max` costs 22s and ~1,100 reasoning tokens, `low` 3.7s and ~24.
+            { reasoning: { effort: env('OPENROUTER_REASONING_EFFORT') ?? 'low' } },
           )
         : null,
   }

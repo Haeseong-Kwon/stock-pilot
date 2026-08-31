@@ -243,6 +243,9 @@ function collectIndicators(text: string, removing: boolean): ChartCommand[] {
   if (/거래량\s*(?:이동\s*)?평균|volume\s*(?:sma|average|ma)\b/i.test(text)) {
     commands.push({ type, indicator: 'VOLUME_SMA' })
   }
+  if (/변동성\s*(지표|추가|보여)|volatility\s*(indicator|band)?/i.test(text) && !/변동성의|volatility\)/i.test(text)) {
+    commands.push({ type, indicator: 'VOLATILITY' })
+  }
 
   return commands
 }

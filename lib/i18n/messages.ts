@@ -36,6 +36,7 @@ const ko = {
   'indicators.hint.bollinger': '변동성 밴드',
   'indicators.hint.atr': '평균 실질 변동폭 · 별도 패널',
   'indicators.hint.volumeSma': '평균 거래량 오버레이',
+  'indicators.hint.volatility': '수익률 표준편차 · 별도 패널',
 
   'chart.loading': '시장 데이터를 불러오는 중…',
   'chart.error.title': '시장 데이터를 가져올 수 없습니다',
@@ -100,6 +101,7 @@ const ko = {
   'reply.invalid': '그 요청을 유효한 차트 명령으로 바꾸지 못했습니다. 지표나 조건을 조금 더 구체적으로 알려주세요.',
   'reply.providerDown': 'AI 공급자에 연결할 수 없어 내장 파서로 처리했습니다.',
   'reply.providerDownEmpty': '지금은 AI 공급자에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+  'reply.partial': '(명령 {count}개는 형식이 올바르지 않아 실행하지 않았습니다.)',
 } as const
 
 export type MessageKey = keyof typeof ko
@@ -136,6 +138,7 @@ const en: Record<MessageKey, string> = {
   'indicators.hint.bollinger': 'Volatility bands',
   'indicators.hint.atr': 'Average true range · own pane',
   'indicators.hint.volumeSma': 'Average volume overlay',
+  'indicators.hint.volatility': 'Rolling stdev of returns · own pane',
 
   'chart.loading': 'Loading market data…',
   'chart.error.title': 'Market data unavailable',
@@ -201,6 +204,7 @@ const en: Record<MessageKey, string> = {
     'I could not turn that into a valid chart command. Try naming the indicator or condition explicitly.',
   'reply.providerDown': 'The AI provider was unavailable, so the built-in parser handled it.',
   'reply.providerDownEmpty': 'The AI provider is unavailable right now. Please try again in a moment.',
+  'reply.partial': '({count} command(s) were malformed and were not run.)',
 }
 
 export const MESSAGES: Record<Locale, Record<MessageKey, string>> = { ko, en }

@@ -8,6 +8,7 @@ import { executeCommands } from '@/lib/chart/commandExecutor'
 import { formatDate } from '@/lib/format'
 import { useAiStore } from '@/stores/aiStore'
 import { useChartStore } from '@/stores/chartStore'
+import { useLocaleStore, useT } from '@/stores/localeStore'
 import { ChatMessage } from './ChatMessage'
 import { PromptSuggestions } from './PromptSuggestions'
 
@@ -17,6 +18,7 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
   const append = useAiStore((s) => s.append)
   const setSending = useAiStore((s) => s.setSending)
   const reset = useAiStore((s) => s.reset)
+  const t = useT()
 
   const [draft, setDraft] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -46,6 +48,7 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            locale: useLocaleStore.getState().locale,
             messages: useAiStore
               .getState()
               .messages.slice(-12)
@@ -67,7 +70,7 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
           const message =
             typeof payload === 'object' && payload && 'error' in payload
               ? String((payload as { error: unknown }).error)
-              : `Request failed (${response.status})`
+              : t('ai.error.status', { status: response.status })
           append({ role: 'assistant', content: message, failed: true })
           return
         }
@@ -76,7 +79,7 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
         if (!parsed.success) {
           append({
             role: 'assistant',
-            content: 'The response could not be validated, so nothing was applied to the chart.',
+            content: t('ai.error.invalid'),
             failed: true,
           })
           return
@@ -97,28 +100,28 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
         console.error('[ai] request failed:', error)
         append({
           role: 'assistant',
-          content: 'Could not reach the analysis service. Check your connection and try again.',
+          content: t('ai.error.network'),
           failed: true,
         })
       } finally {
         setSending(false)
       }
     },
-    [append, setSending],
+    [append, setSending, t],
   )
 
   return (
     <aside className="flex h-full min-w-0 flex-col bg-surface">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3">
-        <span className="text-[12px] font-medium text-text">AI Analyst</span>
+        <span className="text-[12px] font-medium text-text">{t('ai.title')}</span>
         <span className="rounded border border-line px-1.5 py-0.5 text-[10px] text-faint">
-          command interface
+          {t('ai.subtitle')}
         </span>
         {messages.length > 0 ? (
           <button
             type="button"
             onClick={reset}
-            aria-label="Clear conversation"
+            aria-label={t('ai.clear')}
             className="ml-auto rounded p-1 text-faint transition-colors hover:text-text"
           >
             <Eraser className="h-3.5 w-3.5" />
@@ -129,11 +132,8 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3">
         {messages.length === 0 ? (
           <div className="pt-6 text-[12px] leading-relaxed text-muted">
-            <p className="text-text">Describe what you want to see on the chart.</p>
-            <p className="mt-1.5 text-faint">
-              Conditions are compiled into a typed command and evaluated against the real candles —
-              the model never invents dates or counts.
-            </p>
+            <p className="text-text">{t('ai.empty.title')}</p>
+            <p className="mt-1.5 text-faint">{t('ai.empty.body')}</p>
           </div>
         ) : null}
         {messages.map((entry) => (
@@ -142,7 +142,7 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
         {isSending ? (
           <div className="flex items-center gap-2 text-[11px] text-faint">
             <span className="h-3 w-3 animate-spin rounded-full border border-line border-t-accent" />
-            Interpreting…
+            {t('ai.thinking')}
           </div>
         ) : null}
       </div>
@@ -167,20 +167,20 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
               }
             }}
             rows={1}
-            placeholder="e.g. mark days that dropped more than 5%"
+            placeholder={t('ai.placeholder')}
             className="max-h-32 min-h-[22px] w-full resize-none bg-transparent text-[12.5px] leading-relaxed text-text outline-none placeholder:text-faint"
           />
           <button
             type="submit"
             disabled={isSending || draft.trim().length === 0}
-            aria-label="Send"
+            aria-label={t('ai.send')}
             className="shrink-0 rounded-md bg-accent p-1.5 text-base transition-opacity disabled:opacity-30"
           >
             <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.5} />
           </button>
         </div>
         <p className="pt-1.5 text-center text-[10px] text-faint">
-          Analysis tool, not investment advice.
+          {t('ai.disclaimer')}
         </p>
       </form>
     </aside>

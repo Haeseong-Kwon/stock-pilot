@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { SYMBOL_CATALOGUE, searchCatalogue } from '@/lib/market/symbols'
 import { useChartStore } from '@/stores/chartStore'
+import { useT } from '@/stores/localeStore'
 
 export function SymbolSearch() {
   const symbol = useChartStore((s) => s.symbol)
   const setSymbol = useChartStore((s) => s.setSymbol)
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
@@ -18,10 +20,10 @@ export function SymbolSearch() {
     const typed = query.trim().toUpperCase()
     // Any ticker can be requested, not just catalogued ones.
     if (typed && !matches.some((m) => m.symbol === typed)) {
-      return [{ symbol: typed, name: 'Search this ticker', kind: 'stock' as const }, ...matches]
+      return [{ symbol: typed, name: t('search.useTicker'), kind: 'stock' as const }, ...matches]
     }
     return matches
-  }, [query])
+  }, [query, t])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -59,7 +61,9 @@ export function SymbolSearch() {
       >
         <Search className="h-3.5 w-3.5 text-faint" />
         <span className="text-[13px] font-semibold tracking-wide text-text">{symbol}</span>
-        <span className="hidden max-w-40 truncate text-[11px] text-faint lg:inline">{meta?.name ?? 'Custom ticker'}</span>
+        <span className="hidden max-w-40 truncate text-[11px] text-faint lg:inline">
+          {meta?.name ?? t('search.custom')}
+        </span>
         <kbd className="ml-1 rounded border border-line px-1 text-[10px] text-faint">⌘K</kbd>
       </button>
 
@@ -93,13 +97,13 @@ export function SymbolSearch() {
                     if (picked) commit(picked.symbol)
                   }
                 }}
-                placeholder="Search symbol — AAPL, NVDA, BTCUSDT…"
+                placeholder={t('search.placeholder')}
                 className="w-full bg-transparent py-3 text-sm text-text outline-none placeholder:text-faint"
               />
             </div>
             <ul className="max-h-80 overflow-y-auto py-1">
               {results.length === 0 ? (
-                <li className="px-3 py-6 text-center text-xs text-faint">No matching symbol.</li>
+                <li className="px-3 py-6 text-center text-xs text-faint">{t('search.empty')}</li>
               ) : null}
               {results.map((result, index) => (
                 <li key={result.symbol}>
@@ -116,7 +120,7 @@ export function SymbolSearch() {
                       <span className="truncate text-[11px] text-faint">{result.name}</span>
                     </span>
                     <span className="rounded border border-line px-1.5 py-0.5 text-[10px] text-faint uppercase">
-                      {result.kind}
+                      {t(result.kind === 'crypto' ? 'search.kind.crypto' : 'search.kind.stock')}
                     </span>
                   </button>
                 </li>

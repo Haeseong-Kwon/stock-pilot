@@ -1,9 +1,12 @@
 'use client'
 
 import type { ChatEntry } from '@/stores/aiStore'
+import { useT } from '@/stores/localeStore'
 import { CommandResultList } from './CommandResultList'
 
 export function ChatMessage({ entry }: { entry: ChatEntry }) {
+  const t = useT()
+
   if (entry.role === 'user') {
     return (
       <div className="animate-in-soft flex justify-end">
@@ -19,7 +22,8 @@ export function ChatMessage({ entry }: { entry: ChatEntry }) {
       <div className="flex items-center gap-1.5 pb-1">
         <span className="h-1.5 w-1.5 rounded-full bg-accent" />
         <span className="text-[10.5px] tracking-wide text-faint uppercase">
-          Analyst{entry.mode ? ` · ${entry.mode}` : ''}
+          {t('ai.role')}
+          {entry.mode ? ` · ${entry.mode}` : ''}
         </span>
       </div>
       <p

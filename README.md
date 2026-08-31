@@ -38,7 +38,21 @@ plus a rule-based intent parser that covers the documented example commands.
 | `2024년 1월부터 2025년 1월까지만 보여줘` | zooms the visible range |
 | `전부 지워` | clears signals and annotations, keeps the candles |
 
-English works too (`mark days that dropped more than 5% in the last year`).
+English works too (`mark days that dropped more than 5% in the last year`) — the parser is
+bilingual regardless of which interface language is selected.
+
+## Language
+
+The interface ships in **Korean by default**, switchable to English from the ⓘ button in the top
+right. The choice is stored in `localStorage` and survives a reload.
+
+The selected locale is sent with every AI request, so replies come back in that language even when
+you type in the other one. Strings live in one file — `lib/i18n/messages.ts` — and a test asserts
+that every locale has the same keys and the same `{placeholders}`, so a missing translation fails
+`npm test` rather than shipping as English fallback text.
+
+Command results are stored as translation keys rather than rendered text, which is why switching
+language relabels the existing conversation instead of leaving stale strings behind.
 
 ## Architecture
 
@@ -51,7 +65,8 @@ English works too (`mark days that dropped more than 5% in the last year`).
 | `lib/schemas/` | Zod schemas for the expression DSL and for every chart command |
 | `lib/chart/` | command executor, indicator defaults, plot builders, condition descriptions |
 | `lib/ai/` | provider layer, system prompt, demo-mode rule parser |
-| `stores/` | Zustand slices for chart state and conversation state |
+| `lib/i18n/` | message catalogue (ko/en) and the tiny interpolating translator |
+| `stores/` | Zustand slices for chart state, conversation state and locale |
 | `app/api/` | market data and AI endpoints (all external calls happen server-side) |
 
 Indicator series are **derived**, never stored: the store holds definitions, and changing the
@@ -112,7 +127,7 @@ npm run dev         # dev server
 npm run build       # production build
 npm run lint        # eslint
 npm run typecheck   # tsc --noEmit
-npm test            # vitest — 96 unit tests
+npm test            # vitest — 108 unit tests
 npm run test:e2e    # playwright browser smoke test (needs a running server)
 ```
 

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { TIMEFRAMES } from '@/lib/types'
+import { LOCALES } from '@/lib/i18n/messages'
 import { ConditionSchema } from '@/lib/schemas/expression'
 import { INDICATOR_TYPES, IndicatorParamsSchema } from '@/lib/schemas/chartCommand'
 
@@ -28,5 +29,7 @@ export const ChatRequestSchema = z.object({
     .min(1)
     .max(20),
   context: ChartContextSchema,
+  /** Drives both the reply language and the demo-mode parser's wording. */
+  locale: z.enum(LOCALES).default('ko'),
 })
 export type ChatRequest = z.infer<typeof ChatRequestSchema>

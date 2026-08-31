@@ -2,6 +2,7 @@
 
 import { CheckCircle2, CircleSlash, TriangleAlert } from 'lucide-react'
 import type { CommandResult } from '@/lib/chart/commandExecutor'
+import { useT } from '@/stores/localeStore'
 
 const ICONS = {
   ok: CheckCircle2,
@@ -16,7 +17,9 @@ const TONES = {
 } as const
 
 export function CommandResultList({ results }: { results: CommandResult[] }) {
+  const t = useT()
   if (results.length === 0) return null
+
   return (
     <ul className="mt-2 space-y-1.5">
       {results.map((result, index) => {
@@ -28,7 +31,9 @@ export function CommandResultList({ results }: { results: CommandResult[] }) {
           >
             <div className="flex items-center gap-1.5">
               <Icon className={`h-3.5 w-3.5 shrink-0 ${TONES[result.status]}`} />
-              <span className="font-medium text-text">{result.label}</span>
+              <span className="font-medium text-text">
+                {result.labelKey ? t(result.labelKey) : result.label}
+              </span>
               <span className="ml-auto font-mono text-[10px] tracking-tight text-faint">
                 {result.type}
               </span>
@@ -39,11 +44,9 @@ export function CommandResultList({ results }: { results: CommandResult[] }) {
               </p>
             ) : null}
             {result.count !== undefined ? (
-              <p className="mt-1 tnum text-muted">
-                <span className="text-text">{result.count}</span> match{result.count === 1 ? '' : 'es'}
-              </p>
+              <p className="mt-1 tnum text-muted">{t('result.matches', { count: result.count })}</p>
             ) : null}
-            {result.message ? <p className="mt-1 text-faint">{result.message}</p> : null}
+            {result.messageKey ? <p className="mt-1 text-faint">{t(result.messageKey)}</p> : null}
           </li>
         )
       })}

@@ -4,6 +4,7 @@ import { X } from 'lucide-react'
 import { useChartStore } from '@/stores/chartStore'
 import { indicatorLabel } from '@/lib/chart/indicators'
 import { describeCondition } from '@/lib/chart/describe'
+import { useT } from '@/stores/localeStore'
 
 /** Types whose period is edited inline — their badge drops the period from the label. */
 const EDITABLE: Record<string, string> = {
@@ -21,6 +22,7 @@ export function IndicatorBadges() {
   const removeIndicatorById = useChartStore((s) => s.removeIndicatorById)
   const setIndicatorParams = useChartStore((s) => s.setIndicatorParams)
   const removeSignal = useChartStore((s) => s.removeSignal)
+  const t = useT()
 
   if (indicators.length === 0 && signals.length === 0) return null
 
@@ -45,14 +47,14 @@ export function IndicatorBadges() {
                   setIndicatorParams(def.id, { period })
                 }
               }}
-              aria-label={`${def.type} period`}
+              aria-label={t('indicators.period', { type: def.type })}
               className="w-8 appearance-none rounded-sm border border-transparent bg-transparent text-center text-[11px] tnum text-faint outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none hover:border-line focus:border-accent focus:text-text"
             />
           ) : null}
           <button
             type="button"
             onClick={() => removeIndicatorById(def.id)}
-            aria-label={`Remove ${indicatorLabel(def)}`}
+            aria-label={t('indicators.remove', { name: indicatorLabel(def) })}
             className="rounded-sm p-0.5 text-faint hover:bg-line hover:text-text"
           >
             <X className="h-3 w-3" />
@@ -72,7 +74,7 @@ export function IndicatorBadges() {
           <button
             type="button"
             onClick={() => removeSignal(signal.name)}
-            aria-label={`Remove ${signal.name}`}
+            aria-label={t('indicators.remove', { name: signal.name })}
             className="rounded-sm p-0.5 opacity-70 hover:bg-line hover:opacity-100"
           >
             <X className="h-3 w-3" />

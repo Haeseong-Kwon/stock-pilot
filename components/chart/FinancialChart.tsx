@@ -23,6 +23,7 @@ import type { Candle } from '@/lib/types'
 import { evaluateSignal, type SignalMatch } from '@/lib/analysis/signals'
 import { buildIndicatorPlots } from '@/lib/chart/series'
 import { useChartStore, type SignalDef } from '@/stores/chartStore'
+import { useT } from '@/stores/localeStore'
 import { ChartLegend } from './ChartLegend'
 import { SignalTooltip } from './SignalTooltip'
 
@@ -42,6 +43,7 @@ export function FinancialChart({ candles, loading, error }: Props) {
   const indicatorSeriesRef = useRef<ISeriesApi<SeriesType>[]>([])
   const priceLinesRef = useRef<IPriceLine[]>([])
 
+  const t = useT()
   const indicators = useChartStore((s) => s.indicators)
   const signals = useChartStore((s) => s.signals)
   const priceLines = useChartStore((s) => s.priceLines)
@@ -358,7 +360,7 @@ export function FinancialChart({ candles, loading, error }: Props) {
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-base/70 backdrop-blur-[1px]">
           <div className="flex items-center gap-2 text-xs text-muted">
             <span className="h-3 w-3 animate-spin rounded-full border border-line border-t-accent" />
-            Loading market data…
+            {t('chart.loading')}
           </div>
         </div>
       ) : null}
@@ -366,7 +368,7 @@ export function FinancialChart({ candles, loading, error }: Props) {
       {error && !loading ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-base/80">
           <div className="max-w-sm rounded-md border border-line bg-surface px-4 py-3 text-center">
-            <p className="text-sm text-down">Market data unavailable</p>
+            <p className="text-sm text-down">{t('chart.error.title')}</p>
             <p className="mt-1 text-xs text-muted">{error}</p>
           </div>
         </div>

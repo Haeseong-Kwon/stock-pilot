@@ -120,6 +120,8 @@ describe('executeCommands', () => {
     )
     expect(result!.count).toBe(1)
     expect(result!.status).toBe('ok')
+    // Signal names are user data, so they stay literal rather than becoming a key.
+    expect(result!.label).toBe('Large Drop')
     expect(useChartStore.getState().signals).toHaveLength(1)
   })
 
@@ -171,7 +173,7 @@ describe('executeCommands', () => {
       candles,
     )
     expect(result!.status).toBe('empty')
-    expect(result!.message).toMatch(/no bars/i)
+    expect(result!.messageKey).toBe('msg.noMatches')
   })
 
   it('fails cleanly when there is no signal to update', () => {
@@ -208,6 +210,7 @@ describe('executeCommands', () => {
   it('rejects an unreadable date range instead of throwing', () => {
     const [result] = executeCommands([{ type: 'ZOOM_RANGE', from: 'whenever' }], candles)
     expect(result!.status).toBe('error')
+    expect(result!.messageKey).toBe('msg.badRange')
   })
 
   it('records support and resistance levels', () => {

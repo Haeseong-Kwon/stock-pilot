@@ -1,3 +1,4 @@
+import { LOCALE_LABELS, type Locale } from '@/lib/i18n/messages'
 import type { ChartContext } from './context'
 
 export const SYSTEM_PROMPT = `You are ChartPilot, the analysis engine behind an AI-native financial charting app.
@@ -9,7 +10,7 @@ you never state which dates matched, never invent indicator values, never count 
 A deterministic engine runs your commands against the real candles and reports the counts to the user.
 
 Reply with a single JSON object, no prose outside it:
-{ "reply": "<1-2 short sentences in the user's language>", "commands": [ ... ] }
+{ "reply": "<1-2 short sentences, in the reply language given below>", "commands": [ ... ] }
 
 If nothing about the chart should change, return an empty commands array and answer in "reply".
 
@@ -61,8 +62,13 @@ CONVENTIONS
 - When the user asks to see an indicator that a signal uses (RSI, Bollinger...), also ADD_INDICATOR it.
 - When the user gives no explicit time window for a signal, omit "range".`
 
-export function buildContextMessage(context: ChartContext, now = new Date()): string {
+export function buildContextMessage(
+  context: ChartContext,
+  locale: Locale = 'ko',
+  now = new Date(),
+): string {
   return [
+    `Reply language: ${LOCALE_LABELS[locale]} (${locale}). Write "reply" in this language regardless of the language the user typed in.`,
     `Today (UTC): ${now.toISOString().slice(0, 10)}`,
     `Symbol: ${context.symbol}   Timeframe: ${context.timeframe}`,
     `Loaded bars: ${context.barCount}${

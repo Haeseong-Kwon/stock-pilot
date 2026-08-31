@@ -16,45 +16,73 @@ const check = (label, ok, extra = '') => {
 }
 
 const browser = await chromium.launch()
-const page = await browser.newPage({ viewport: { width: 1512, height: 900 } })
+const context = await browser.newContext({ viewport: { width: 1512, height: 900 } })
+const page = await context.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
 
-const countCanvases = () => page.locator('canvas').count()
+const canvases = () => page.locator('canvas').count()
 const send = async (prompt) => {
   await page.fill('textarea', prompt)
   await page.keyboard.press('Enter')
   await page.waitForTimeout(1800)
 }
+const setLanguage = async (name) => {
+  await page.getByLabel(/설정 및 정보|Settings and about/).click()
+  await page.getByRole('radio', { name }).click()
+  await page.getByLabel(/설정 및 정보|Settings and about/).click() // close the popover
+  await page.waitForTimeout(400)
+}
 
 await page.goto(BASE, { waitUntil: 'networkidle' })
 await page.waitForTimeout(2500)
 
-check('chart canvas rendered', (await countCanvases()) > 0, `${await countCanvases()} canvases`)
+check('chart canvas rendered', (await canvases()) > 0, `${await canvases()} canvases`)
 check('legend shows OHLC', await page.locator('text=/O\\s[\\d,.]+/').first().isVisible())
 
-const baseline = await countCanvases()
+// --- default language is Korean ---
+check('UI defaults to Korean', await page.getByText('AI 애널리스트').isVisible())
+check('Korean prompt chips shown', (await page.getByRole('button', { name: /표시해|찾아줘/ }).count()) > 0)
+
+const baseline = await canvases()
 await send('add RSI')
-check('RSI pane added', (await countCanvases()) > baseline, `${baseline} -> ${await countCanvases()}`)
-check('RSI badge visible', (await page.locator('[aria-label="Remove RSI 14"]').count()) === 1)
+check('RSI pane added', (await canvases()) > baseline, `${baseline} -> ${await canvases()}`)
+check('RSI badge visible', (await page.locator('[aria-label="RSI 14 제거"]').count()) === 1)
 
 await send('mark days that dropped more than 5% in the last year')
-const matches = await page.locator('text=/\\d+ match/').first().textContent()
-check('signal reported matches', /[1-9]/.test(matches ?? ''), matches ?? 'none')
+const matched = await page.locator('text=/\\d+건 일치/').first().textContent()
+check('signal reported matches in Korean', /[1-9]/.test(matched ?? ''), matched ?? 'none')
 
 await send('그중 거래량이 두 배 이상 터진 것만 남겨')
-const narrowed = await page.locator('text=/\\d+ match/').last().textContent()
-check('signal narrowed in place', (await page.locator('[aria-label^="Remove Drop"]').count()) === 1, narrowed ?? '')
+const narrowed = await page.locator('text=/\\d+건 일치/').last().textContent()
+check('signal narrowed in place', (await page.locator('[aria-label^="Drop"]').count()) === 1, narrowed ?? '')
 
 await send('최근 6개월 지지선과 저항선 찾아줘')
-check('support/resistance found', (await page.locator('text=Support / resistance').count()) > 0)
+check('support/resistance found', (await page.getByText('지지 · 저항').count()) > 0)
 
-if (SHOT) await page.screenshot({ path: `${SHOT}/chartpilot.png`, fullPage: false })
+if (SHOT) await page.screenshot({ path: `${SHOT}/chartpilot-ko.png` })
 
+// --- switching to English relabels the whole UI, chart state untouched ---
+await setLanguage('English')
+check('switched to English', await page.getByText('AI Analyst').isVisible())
+check('command results relabelled', (await page.getByText('Support / resistance').count()) > 0)
+check('counts pluralised in English', (await page.locator('text=/\\d+ match/').count()) > 0)
+check('chart survives the language switch', (await canvases()) > baseline)
+check('badges relabelled', (await page.locator('[aria-label="Remove RSI 14"]').count()) === 1)
+
+if (SHOT) await page.screenshot({ path: `${SHOT}/chartpilot-en.png` })
+
+// --- the choice persists across a reload ---
+await page.reload({ waitUntil: 'networkidle' })
+await page.waitForTimeout(2500)
+check('language persists after reload', await page.getByText('AI Analyst').isVisible())
+
+// --- back to Korean, and clearing keeps the candles ---
+await setLanguage('한국어')
 await send('전부 지워')
-check('annotations cleared', (await page.locator('[aria-label^="Remove Drop"]').count()) === 0)
-check('candles survive the clear', (await countCanvases()) > 0)
+check('annotations cleared', (await page.locator('[aria-label^="Drop"]').count()) === 0)
+check('candles survive the clear', (await canvases()) > 0)
 
 check('no uncaught page errors', errors.length === 0, errors.slice(0, 3).join(' | '))
 

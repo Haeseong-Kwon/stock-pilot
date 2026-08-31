@@ -2,6 +2,7 @@ import type { Condition } from '@/lib/schemas/expression'
 import type { AiResponse, ChartCommand, IndicatorType } from '@/lib/schemas/chartCommand'
 import { SYMBOL_CATALOGUE } from '@/lib/market/symbols'
 import type { Timeframe } from '@/lib/types'
+import { translator, type Locale } from '@/lib/i18n/messages'
 import type { ChartContext } from './context'
 
 /**
@@ -250,16 +251,18 @@ function dedupe(commands: ChartCommand[]): ChartCommand[] {
   })
 }
 
-const isKorean = (text: string) => /[가-힣]/.test(text)
-
-export function parseLocally(input: string, context: ChartContext): AiResponse {
+export function parseLocally(
+  input: string,
+  context: ChartContext,
+  locale: Locale = 'ko',
+): AiResponse {
   const text = input.trim()
-  const ko = isKorean(text)
+  const t = translator(locale)
   const commands: ChartCommand[] = []
 
   if (CLEAR_ALL.test(text) && !/rsi|sma|ema|macd|볼린저|bollinger/i.test(text)) {
     return {
-      reply: ko ? '차트의 신호와 주석을 모두 지웠습니다.' : 'Cleared every signal and annotation.',
+      reply: t('reply.cleared'),
       commands: [{ type: 'CLEAR_ANNOTATIONS', scope: 'all' }],
     }
   }
@@ -335,18 +338,8 @@ export function parseLocally(input: string, context: ChartContext): AiResponse {
 
   const final = dedupe(commands)
   if (final.length === 0) {
-    return {
-      reply: ko
-        ? '데모 모드에서는 지표 추가/제거, 조건 기반 신호, 지지·저항 탐색 같은 명령을 이해합니다. 예: "RSI 추가", "최근 1년간 5% 이상 하락한 날 표시".'
-        : 'Demo Mode understands indicator, signal, and support/resistance commands. Try "add RSI" or "mark days that dropped more than 5% in the last year".',
-      commands: [],
-    }
+    return { reply: t('reply.help'), commands: [] }
   }
 
-  return {
-    reply: ko
-      ? '요청하신 내용을 차트에 적용했습니다.'
-      : 'Applied your request to the chart.',
-    commands: final,
-  }
+  return { reply: t('reply.applied'), commands: final }
 }

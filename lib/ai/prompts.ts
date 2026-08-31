@@ -50,6 +50,7 @@ EXPRESSIONS (or a bare number anywhere an expression is allowed):
 {"type":"DRAWDOWN"}                   // negative fraction from the running peak
 {"type":"ADD|SUBTRACT|MULTIPLY|DIVIDE","left":<Expr|number>,"right":<Expr|number>}
 {"type":"ABS","value":<Expr|number>}
+{"type":"LAG","value":<Expr|number>,"bars":1}   // the value N bars ago — the only way to look back
 
 CONVENTIONS
 - "dropped 5%"        -> COMPARE RETURN(1) <= -0.05
@@ -61,7 +62,16 @@ CONVENTIONS
 - Follow-ups like "only keep the ones that ..." mean UPDATE_SIGNAL with the EXISTING condition
   wrapped in an AND together with the new clause. The active signals are given to you below.
 - When the user asks to see an indicator that a signal uses (RSI, Bollinger...), also ADD_INDICATOR it.
-- When the user gives no explicit time window for a signal, omit "range".`
+- When the user gives no explicit time window for a signal, omit "range".
+- LAG is how you express anything about earlier bars. "3 days down in a row" is
+  AND[ RETURN(1) < 0, LAG(RETURN(1),1) < 0, LAG(RETURN(1),2) < 0 ] — one clause per bar.
+  "RSI was above 70 in the last 3 bars and is now below 60" is
+  AND[ RSI(14) < 60, OR[ LAG(RSI(14),1) > 70, LAG(RSI(14),2) > 70, LAG(RSI(14),3) > 70 ] ].
+  Never claim a lookback you cannot write with LAG.
+- You cannot see prices, so you cannot pick a period by its statistics. HIGHLIGHT_RANGE and
+  ZOOM_RANGE only take dates the USER named. For "the most volatile month", "the biggest rally",
+  "the worst week" and anything else that needs ranking, say plainly that you cannot rank periods
+  and offer a threshold-based signal instead. Inventing a date range is the one unforgivable error.`
 
 export function buildContextMessage(
   context: ChartContext,

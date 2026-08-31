@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUp, Eraser, LayoutGrid } from 'lucide-react'
 import type { Candle } from '@/lib/types'
-import { AiResponseSchema } from '@/lib/schemas/chartCommand'
 import { buildChartContext } from '@/lib/ai/context'
+import { readChatStream } from '@/lib/ai/chatStream'
 import { executeCommands } from '@/lib/chart/commandExecutor'
 import { useAiStore } from '@/stores/aiStore'
 import { useChartStore } from '@/stores/chartStore'
@@ -17,6 +17,7 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
   const messages = useAiStore((s) => s.messages)
   const isSending = useAiStore((s) => s.isSending)
   const append = useAiStore((s) => s.append)
+  const update = useAiStore((s) => s.update)
   const setSending = useAiStore((s) => s.setSending)
   const reset = useAiStore((s) => s.reset)
   const t = useT()
@@ -63,8 +64,8 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
           }),
         })
 
-        const payload: unknown = await response.json()
-        if (!response.ok) {
+        if (!response.ok || !response.body) {
+          const payload: unknown = await response.json().catch(() => null)
           const message =
             typeof payload === 'object' && payload && 'error' in payload
               ? String((payload as { error: unknown }).error)
@@ -73,27 +74,29 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
           return
         }
 
-        const parsed = AiResponseSchema.safeParse(payload)
-        if (!parsed.success) {
-          append({
-            role: 'assistant',
-            content: t('ai.error.invalid'),
-            failed: true,
+        // The reply renders as it is written; commands run once the stream ends.
+        const entry = append({ role: 'assistant', content: '', streaming: true, startedAt: Date.now() })
+        let settled = false
+
+        for await (const event of readChatStream(response.body)) {
+          if (event.type === 'reply') {
+            update(entry.id, { content: event.text })
+            continue
+          }
+          settled = true
+          const results = executeCommands(event.commands, candlesRef.current)
+          update(entry.id, {
+            content: event.reply,
+            results,
+            mode: event.mode,
+            streaming: false,
+            ...(event.failed ? { failed: true } : {}),
           })
-          return
         }
 
-        const results = executeCommands(parsed.data.commands, candlesRef.current)
-        const mode =
-          typeof payload === 'object' && payload && 'mode' in payload
-            ? String((payload as { mode: unknown }).mode)
-            : undefined
-        append({
-          role: 'assistant',
-          content: parsed.data.reply,
-          results,
-          ...(mode ? { mode } : {}),
-        })
+        if (!settled) {
+          update(entry.id, { content: t('ai.error.network'), failed: true, streaming: false })
+        }
       } catch (error) {
         console.error('[ai] request failed:', error)
         append({
@@ -105,11 +108,11 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
         setSending(false)
       }
     },
-    [append, setSending, t],
+    [append, update, setSending, t],
   )
 
   return (
-    <aside className="flex h-full min-w-0 flex-col bg-surface">
+    <aside className="flex h-full min-w-0 flex-col bg-surface" data-ai-busy={isSending || undefined}>
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3">
         <span className="text-[12px] font-medium text-text">{t('ai.title')}</span>
         <span className="rounded border border-line px-1.5 py-0.5 text-[10px] text-faint">
@@ -156,12 +159,7 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
         {messages.map((entry) => (
           <ChatMessage key={entry.id} entry={entry} />
         ))}
-        {isSending ? (
-          <div className="flex items-center gap-2 text-[11px] text-faint">
-            <span className="h-3 w-3 animate-spin rounded-full border border-line border-t-accent" />
-            {t('ai.thinking')}
-          </div>
-        ) : null}
+
       </div>
 
       {messages.length === 0 ? <PromptSuggestions onPick={send} /> : null}

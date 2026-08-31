@@ -26,13 +26,13 @@ const canvases = () => page.locator('canvas').count()
 const resultCards = () => page.locator('[data-command-result]').count()
 const signalBadges = () => page.locator('[data-signal-badge]').count()
 // Waits for the in-flight request to finish. The demo parser answers instantly,
-// a live LLM can take 15s+ — a fixed sleep cannot serve both. The spinner has to
-// be seen appearing first: waiting only for "detached" resolves immediately.
-const spinner = () => page.getByText(/해석하는 중…|Interpreting…/)
+// a live LLM streams for 15s+ — a fixed sleep cannot serve both. `data-ai-busy`
+// covers the whole request, including the gap after the text finishes streaming
+// but before the commands run.
 const settle = async () => {
-  await spinner().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
-  await spinner().waitFor({ state: 'detached', timeout: 90_000 }).catch(() => {})
-  await page.waitForTimeout(600)
+  await page.locator('[data-ai-busy]').waitFor({ state: 'attached', timeout: 5000 }).catch(() => {})
+  await page.locator('[data-ai-busy]').waitFor({ state: 'detached', timeout: 120_000 }).catch(() => {})
+  await page.waitForTimeout(500)
 }
 const send = async (prompt) => {
   await page.fill('textarea', prompt)

@@ -94,7 +94,18 @@ Conditions are a small AST, not free text:
 
 Nodes: `AND OR NOT COMPARE CROSS_ABOVE CROSS_BELOW` over
 `OPEN HIGH LOW CLOSE VOLUME RETURN SMA EMA RSI MACD ATR BOLLINGER VOLUME_SMA VOLATILITY DRAWDOWN`
-plus `ADD SUBTRACT MULTIPLY DIVIDE ABS`. Returns are fractions (`-0.05`, not `-5`).
+plus `ADD SUBTRACT MULTIPLY DIVIDE ABS LAG`. Returns are fractions (`-0.05`, not `-5`).
+
+`LAG` is the lookback primitive — the value a node had N bars ago. "Three down days in a row" is
+one clause per bar:
+
+```jsonc
+{ "type": "AND", "conditions": [
+  { "type": "COMPARE", "left": { "type": "RETURN", "period": 1 }, "operator": "<", "right": 0 },
+  { "type": "COMPARE", "left": { "type": "LAG", "value": { "type": "RETURN", "period": 1 }, "bars": 1 }, "operator": "<", "right": 0 },
+  { "type": "COMPARE", "left": { "type": "LAG", "value": { "type": "RETURN", "period": 1 }, "bars": 2 }, "operator": "<", "right": 0 }
+]}
+```
 
 ## AI providers
 
@@ -134,6 +145,12 @@ is simply ignored.
 Commands are validated **one at a time**, so a single malformed command cannot discard the valid
 ones next to it; anything rejected is reported in the reply and never reaches the chart.
 
+**Upstream routing.** OpenRouter load-balances one model across many upstream providers, and not
+all of them honour `response_format` — landing on one produced prose instead of JSON and silently
+dropped the request to the rule-based parser (3 of the 21 upstreams serving GLM 5.3 Flash lack it).
+Requests therefore pin `provider: { require_parameters: true }`, and a non-JSON reply is retried
+once before giving up.
+
 Providers are plain `fetch` calls behind one `LlmProvider` interface (`lib/ai/provider.ts`); no
 vendor SDK leaks into the rest of the app. If the model returns something that fails Zod
 validation, **nothing is executed** — the request falls back to the rule-based parser.
@@ -153,6 +170,43 @@ validation, **nothing is executed** — the request falls back to the rule-based
 When live data cannot be fetched, the app serves deterministic synthetic candles and shows a
 **Demo data** badge rather than an empty chart.
 
+## Streaming
+
+`/api/ai/chat` answers with newline-delimited JSON: `reply` events carry the text as the model
+writes it, and a single `done` event carries the Zod-validated commands. The chart only changes on
+`done` — a half-written command is never executed. Demo Mode emits one `done` event and nothing
+else, so the client has a single code path.
+
+A reasoning model produces no output for the first several seconds, so the pending message shows a
+live elapsed counter rather than a static spinner.
+
+## Model evaluation
+
+`tests/eval/` is a bake-off harness over 38 golden cases — the 30 gallery prompts plus 8 that the
+rule-based parser could not express. It reports accuracy, latency and real cost per model:
+
+```bash
+npm run eval                                                   # the configured model
+npm run eval -- --models z-ai/glm-5.3-flash,openai/gpt-5-mini  # compare
+npm run eval -- --effort high --limit 10
+```
+
+It spends real money (about $0.002 per model per run at GLM prices), which is why it is not part of
+`npm test`. Cases assert command *types* and required substrings, and accept equivalent answers
+where more than one command sequence reaches the same chart state.
+
+Last run (38 cases, `effort=low`):
+
+| model | accuracy | p50 | p95 | cost/request |
+| --- | --- | --- | --- | --- |
+| `z-ai/glm-5.3-flash` **(default)** | 38/38 | 1,077ms | 1,369ms | **$0.00005** |
+| `openai/gpt-5-mini` | 38/38 | 497ms | 936ms | $0.00074 |
+| `deepseek/deepseek-v4-flash` | 38/38 | 1,730ms | 2,041ms | $0.00019 |
+
+All three are correct on every case, so the default is the cheapest of them — GLM is 15× cheaper
+than gpt-5-mini, which in turn is about 2× faster. Note that a set every candidate aces no longer
+discriminates: harder cases are needed before this table can pick a winner on quality again.
+
 ## Scripts
 
 ```bash
@@ -160,8 +214,9 @@ npm run dev         # dev server
 npm run build       # production build (writes .next)
 npm run lint        # eslint
 npm run typecheck   # tsc --noEmit
-npm test            # vitest — 217 unit tests
+npm test            # vitest — 236 unit tests
 npm run test:e2e    # playwright browser smoke test (needs a running server)
+npm run eval        # model bake-off against 38 golden cases (spends money)
 ```
 
 `next build` and `next dev` share `.next`, so building while the dev server is up corrupts its
@@ -183,10 +238,11 @@ NEXT_DIST_DIR=.next-verify npm run build
 - `UPDATE_INDICATOR` is the one command the demo parser does not emit (it collides with the
   "RSI 30" threshold rule); edit a period inline on its chart badge instead. With an LLM connected
   it works normally.
-- LLM latency is variable — typically 3-6s, occasionally 15s+. The chart stays interactive
-  throughout, but there is no streaming or optimistic UI yet.
-- The DSL has no lag/offset or ranking operator, so "3 days in a row" and "the most volatile month"
-  cannot be expressed exactly. The model approximates the first and declines the second.
+- LLM latency is variable — typically 1-6s, occasionally 15s+. The reply streams as it is written,
+  but the reasoning phase before it produces nothing, so the first seconds show only the counter.
+- The DSL has no ranking operator, so "the most volatile month" cannot be expressed. The model is
+  instructed to say so rather than invent a date range — inventing one is the failure mode the
+  whole architecture exists to prevent, and the eval suite asserts it does not happen.
 - No backtesting, no order routing, no portfolio. The command/executor split is designed to make
   backtesting an additive change, but it is not implemented.
 - Desktop-first (≥1440px). The layout degrades gracefully but is not optimised for mobile.

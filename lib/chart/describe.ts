@@ -2,8 +2,11 @@ import type { Condition, Expression, Operand } from '@/lib/schemas/expression'
 
 const PERCENT_EXPRESSIONS = new Set(['RETURN', 'DRAWDOWN', 'VOLATILITY'])
 
+/** LAG is transparent here: LAG(RETURN, 2) is still a percentage. */
 function isPercentOperand(operand: Operand): boolean {
-  return typeof operand !== 'number' && PERCENT_EXPRESSIONS.has(operand.type)
+  if (typeof operand === 'number') return false
+  if (operand.type === 'LAG') return isPercentOperand(operand.value)
+  return PERCENT_EXPRESSIONS.has(operand.type)
 }
 
 function describeExpression(expr: Expression): string {
@@ -37,6 +40,8 @@ function describeExpression(expr: Expression): string {
       return 'Drawdown'
     case 'ABS':
       return `|${describeOperand(expr.value)}|`
+    case 'LAG':
+      return `${describeOperand(expr.value)}[-${expr.bars}]`
     case 'ADD':
       return `${describeOperand(expr.left)} + ${describeOperand(expr.right)}`
     case 'SUBTRACT':

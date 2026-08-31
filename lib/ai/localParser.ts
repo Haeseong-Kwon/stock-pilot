@@ -83,11 +83,37 @@ function detectDates(text: string): string[] {
 
 type Fragment = { condition: Condition; name: string; color: string; indicator?: IndicatorType }
 
+const STREAK = /(\d+)\s*(?:일|days?|bars?)?\s*(?:연속|in\s*a\s*row|consecutive)/i
+
+/** "3일 연속 하락" -> one clause per bar, chained with LAG. */
+function streakFragment(text: string): Fragment | null {
+  const match = STREAK.exec(text)
+  if (!match?.[1]) return null
+  const bars = Number(match[1])
+  if (!Number.isInteger(bars) || bars < 2 || bars > 30) return null
+  const down = has(text, DOWN)
+  if (!down && !has(text, UP)) return null
+  const clause = (lag: number): Condition => ({
+    type: 'COMPARE',
+    left: lag === 0 ? { type: 'RETURN', period: 1 } : { type: 'LAG', value: { type: 'RETURN', period: 1 }, bars: lag },
+    operator: down ? '<' : '>',
+    right: 0,
+  })
+  return {
+    condition: { type: 'AND', conditions: Array.from({ length: bars }, (_, i) => clause(i)) },
+    name: `${bars}${down ? '연속 하락' : '연속 상승'}`,
+    color: down ? '#ef4444' : '#22c55e',
+  }
+}
+
 function collectFragments(text: string): Fragment[] {
   const fragments: Fragment[] = []
 
+  const streak = streakFragment(text)
+  if (streak) fragments.push(streak)
+
   // Percentage move, e.g. "5% 이상 떨어진" / "rose more than 3%"
-  const percent = numberBefore(text, /\s*%|퍼센트|percent/)
+  const percent = streak ? null : numberBefore(text, /\s*%|퍼센트|percent/)
   if (percent !== null && (has(text, DOWN) || has(text, UP))) {
     const down = has(text, DOWN)
     fragments.push({
@@ -100,7 +126,7 @@ function collectFragments(text: string): Fragment[] {
       name: down ? `Drop ≥ ${percent}%` : `Gain ≥ ${percent}%`,
       color: down ? '#ef4444' : '#22c55e',
     })
-  } else if (/폭락|급락|crash|plunge|폭등|급등|surge/i.test(text)) {
+  } else if (!streak && /폭락|급락|crash|plunge|폭등|급등|surge/i.test(text)) {
     // No explicit threshold: scale the move against recent volatility.
     const down = /폭락|급락|crash|plunge/i.test(text)
     fragments.push({

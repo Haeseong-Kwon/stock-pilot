@@ -84,6 +84,10 @@ function compute(candles: Candle[], expr: Expression, cache: Cache): Series {
       return drawdown(closes)
     case 'ABS':
       return evaluateOperand(candles, expr.value, cache).map((v) => (v === null ? null : Math.abs(v)))
+    case 'LAG': {
+      const inner = evaluateOperand(candles, expr.value, cache)
+      return inner.map((_, i) => (i >= expr.bars ? (inner[i - expr.bars] ?? null) : null))
+    }
     case 'ADD':
     case 'SUBTRACT':
     case 'MULTIPLY':

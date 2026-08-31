@@ -21,6 +21,8 @@ export type Expression =
   | { type: 'DRAWDOWN' }
   | { type: 'ADD' | 'SUBTRACT' | 'MULTIPLY' | 'DIVIDE'; left: Operand; right: Operand }
   | { type: 'ABS'; value: Operand }
+  /** The value this expression had `bars` bars ago. Null before that. */
+  | { type: 'LAG'; value: Operand; bars: number }
 
 /** Anywhere an expression is accepted, a bare number is too. */
 export type Operand = Expression | number
@@ -78,6 +80,11 @@ export const ExpressionSchema: z.ZodType<Expression> = z.lazy(() =>
       right: OperandSchema,
     }),
     z.object({ type: z.literal('ABS'), value: OperandSchema }),
+    z.object({
+      type: z.literal('LAG'),
+      value: OperandSchema,
+      bars: z.number().int().positive().max(500),
+    }),
   ]),
 )
 

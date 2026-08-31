@@ -15,8 +15,8 @@ const config = [
       'no-console': ['error', { allow: ['warn', 'error'] }],
     },
   },
-  // The smoke script is a CLI reporter — printing is the whole point.
-  { files: ['tests/e2e/**'], rules: { 'no-console': 'off' } },
+  // These are CLI reporters — printing is the whole point.
+  { files: ['tests/e2e/**', 'tests/eval/**'], rules: { 'no-console': 'off' } },
 ]
 
 export default config

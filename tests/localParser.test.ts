@@ -10,6 +10,7 @@ const base: ChartContext = {
   barCount: 900,
   indicators: [],
   signals: [],
+  drawings: [],
 }
 
 const withSignal: ChartContext = {

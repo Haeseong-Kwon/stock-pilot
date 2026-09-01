@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { LOCALES, MESSAGES, isLocale, translator, type MessageKey } from '@/lib/i18n/messages'
 import { parseLocally } from '@/lib/ai/localParser'
+import { buildContextMessage, toModelMessages } from '@/lib/ai/prompts'
 import type { ChartContext } from '@/lib/ai/context'
 import {
   ChartContextSchema,
@@ -16,6 +17,7 @@ const context: ChartContext = {
   barCount: 900,
   indicators: [],
   signals: [],
+  drawings: [],
 }
 
 describe('message catalogue', () => {
@@ -150,6 +152,7 @@ describe('chat context stays within the request schema', () => {
       candles,
       indicators: [],
       signals: [],
+      drawings: [],
     })
     expect(built.barCount).toBe(500)
     expect(built.lastPrice).toBe(candles.at(-1)?.close)
@@ -163,8 +166,73 @@ describe('chat context stays within the request schema', () => {
       candles: [],
       indicators: [],
       signals: [],
+      drawings: [],
     })
     expect(built.barCount).toBe(0)
     expect(ChartContextSchema.safeParse(built).success).toBe(true)
+  })
+})
+
+describe('conversation encoding for the model', () => {
+  it('re-encodes assistant turns as the JSON envelope we want back', () => {
+    const encoded = toModelMessages([
+      { role: 'user', content: '추세선 그려줘' },
+      { role: 'assistant', content: '추세선을 그려드릴게요.' },
+      { role: 'user', content: '피보나치도' },
+    ])
+    expect(encoded[0]).toEqual({ role: 'user', content: '추세선 그려줘' })
+    // Sending prose back made the model imitate prose and drop the envelope.
+    expect(JSON.parse(encoded[1]!.content)).toEqual({
+      reply: '추세선을 그려드릴게요.',
+      commands: [],
+    })
+    expect(encoded[2]).toEqual({ role: 'user', content: '피보나치도' })
+  })
+
+  it('leaves every assistant turn parseable, however it was written', () => {
+    const encoded = toModelMessages([
+      { role: 'assistant', content: 'quotes " and \\ backslash' },
+      { role: 'assistant', content: '' },
+    ])
+    for (const message of encoded) {
+      expect(() => JSON.parse(message.content)).not.toThrow()
+    }
+  })
+
+  it('does not touch user turns', () => {
+    const messages = [{ role: 'user' as const, content: '{"not":"json envelope"}' }]
+    expect(toModelMessages(messages)).toEqual(messages)
+  })
+})
+
+describe('drawings in the chart context', () => {
+  const candles = Array.from({ length: 100 }, (_, i) => ({
+    time: 1_700_000_000 + i * 86400,
+    open: 1, high: 1, low: 1, close: 1, volume: 1,
+  }))
+
+  it('tells the model what is already drawn, so it does not redraw it', () => {
+    const built = buildChartContext({
+      symbol: 'BTCUSDT', timeframe: '1D', candles, indicators: [], signals: [],
+      drawings: ['trendline', 'fibonacci'],
+    })
+    expect(built.drawings).toEqual(['trendline', 'fibonacci'])
+    expect(buildContextMessage(built, 'ko')).toContain('trendline, fibonacci')
+  })
+
+  it('deduplicates, since two trendlines are still one kind of drawing', () => {
+    const built = buildChartContext({
+      symbol: 'BTCUSDT', timeframe: '1D', candles, indicators: [], signals: [],
+      drawings: ['trendline', 'trendline', 'channel'],
+    })
+    expect(built.drawings).toEqual(['trendline', 'channel'])
+  })
+
+  it('says none when the chart is clean', () => {
+    const built = buildChartContext({
+      symbol: 'BTCUSDT', timeframe: '1D', candles, indicators: [], signals: [],
+    })
+    expect(built.drawings).toEqual([])
+    expect(buildContextMessage(built, 'ko')).toContain('already on the chart: none')
   })
 })

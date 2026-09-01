@@ -49,6 +49,10 @@ COMMANDS
 {"type":"ZOOM_RANGE","from":"2024-01-01","to":"2025-01-01"}
 {"type":"CLEAR_ANNOTATIONS","scope":"all|signals|lines|highlights|indicators"}
 {"type":"FIND_SUPPORT_RESISTANCE","range":{"from":"-6M"},"maxLevels":6}
+{"type":"DRAW_TRENDLINE","kind":"support|resistance|both","range":{"from":"-6M"},"maxLines":2}
+{"type":"DRAW_FIBONACCI","range":{"from":"-1y"},"extend":false}
+{"type":"DRAW_REGRESSION_CHANNEL","range":{"from":"-6M"},"deviations":2}
+{"type":"ADD_VERTICAL_LINE","date":"2024-03-15","label":"earnings"}
 
 INDICATORS (name, parameters with defaults, output series, and [value range]).
 Read the range before choosing a threshold — comparing a percentage indicator
@@ -101,7 +105,39 @@ CONVENTIONS
 - You cannot see prices, so you cannot pick a period by its statistics. HIGHLIGHT_RANGE and
   ZOOM_RANGE only take dates the USER named. For "the most volatile month", "the biggest rally",
   "the worst week" and anything else that needs ranking, say plainly that you cannot rank periods
-  and offer a threshold-based signal instead. Inventing a date range is the one unforgivable error.`
+  and offer a threshold-based signal instead. Inventing a date range is the one unforgivable error.
+
+DRAWING — this is what the product is for: the user never draws anything themselves.
+- Every drawing command carries INTENT ONLY. You never supply coordinates: the engine finds the
+  pivots, the swing and the fit from the real candles and anchors the drawing to them.
+- "추세선 그려줘" / "draw the trendline"        -> DRAW_TRENDLINE
+- "저항선만" -> kind:"resistance";  "지지선만" -> kind:"support";  otherwise "both"
+- "피보나치" / "되돌림" / "retracement"          -> DRAW_FIBONACCI (extend:true for 1.272/1.618)
+- "채널" / "회귀" / "channel" / "regression"     -> DRAW_REGRESSION_CHANNEL
+- A date the user named that they want marked   -> ADD_VERTICAL_LINE
+- Say what was drawn, never where. The engine reports the anchors, touch counts and whether a
+  trendline has already been broken; do not predict those numbers yourself.
+- Omit "range" unless the user named a window: a drawing with no range covers the recent past
+  (about 200 bars), which is what a chartist means. Do not reach for the whole history yourself.
+- The chart state lists what is already drawn. Issue a drawing command only for what the user is
+  asking for NOW; re-sending an existing drawing just redraws it and clutters the reply.`
+
+/**
+ * Re-encodes the conversation for the model. Assistant turns are stored as the
+ * plain text the user reads, but sending them that way makes the model imitate
+ * prose on the next turn and drop the JSON envelope entirely — the dominant
+ * multi-turn failure. Every assistant turn it sees must look like the answer we
+ * want back.
+ */
+export function toModelMessages(
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  return messages.map((message) =>
+    message.role === 'assistant'
+      ? { role: 'assistant' as const, content: JSON.stringify({ reply: message.content, commands: [] }) }
+      : message,
+  )
+}
 
 export function buildContextMessage(
   context: ChartContext,
@@ -121,6 +157,7 @@ export function buildContextMessage(
         ? context.indicators.map((i) => `${i.type}(${JSON.stringify(i.params)})`).join(', ')
         : 'none'
     }`,
+    `Drawings already on the chart: ${context.drawings.length ? context.drawings.join(', ') : 'none'}`,
     `Active signals: ${
       context.signals.length
         ? context.signals.map((s) => `${s.name} = ${JSON.stringify(s.condition)}`).join(' | ')

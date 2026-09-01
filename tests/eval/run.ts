@@ -40,6 +40,7 @@ const baseContext: ChartContext = {
   lastPrice: 78000,
   indicators: [],
   signals: [],
+  drawings: [],
 }
 
 const withIndicator: ChartContext = {

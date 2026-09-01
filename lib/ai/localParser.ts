@@ -431,9 +431,37 @@ export function parseLocally(
   const priceLine = detectPriceLine(text)
   if (priceLine !== null) commands.push({ type: 'ADD_PRICE_LINE', price: priceLine })
 
-  if (/지지선|저항선|지지\/저항|지지|저항|support|resistance/i.test(text)) {
-    const range = detectRange(text)
-    commands.push({ type: 'FIND_SUPPORT_RESISTANCE', ...(range ? { range } : {}), maxLevels: 6 })
+  if (/수직선|세로선|vertical\s*line/i.test(text) && dates.length >= 1) {
+    commands.push({ type: 'ADD_VERTICAL_LINE', date: dates[0] as string })
+  }
+
+  const drawingRange = detectRange(text)
+
+  // Drawing requests: intent only, the engine computes every anchor.
+  if (/추세선|추세\s*라인|trend\s*line|trendline/i.test(text)) {
+    const kind = /저항|resistance/i.test(text)
+      ? ('resistance' as const)
+      : /지지|support/i.test(text)
+        ? ('support' as const)
+        : ('both' as const)
+    commands.push({ type: 'DRAW_TRENDLINE', kind, ...(drawingRange ? { range: drawingRange } : {}) })
+  } else if (/피보나치|되돌림|fibonacci|retracement|\bfib\b/i.test(text)) {
+    commands.push({
+      type: 'DRAW_FIBONACCI',
+      ...(drawingRange ? { range: drawingRange } : {}),
+      ...(/확장|extension|extend/i.test(text) ? { extend: true } : {}),
+    })
+  } else if (/회귀\s*채널|추세\s*채널|regression\s*channel|linear\s*channel/i.test(text)) {
+    commands.push({
+      type: 'DRAW_REGRESSION_CHANNEL',
+      ...(drawingRange ? { range: drawingRange } : {}),
+    })
+  } else if (/지지선|저항선|지지\/저항|지지|저항|support|resistance/i.test(text)) {
+    commands.push({
+      type: 'FIND_SUPPORT_RESISTANCE',
+      ...(drawingRange ? { range: drawingRange } : {}),
+      maxLevels: 6,
+    })
   }
 
   const removing = REMOVE.test(text)

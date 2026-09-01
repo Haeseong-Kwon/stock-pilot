@@ -2,6 +2,7 @@ import type { Candle } from '@/lib/types'
 import type { ChartCommand, ChartCommandType } from '@/lib/schemas/chartCommand'
 import type { MessageKey } from '@/lib/i18n/messages'
 import { evaluateSignal, findSupportResistance } from '@/lib/analysis/signals'
+import { fibonacciRetracement, findTrendlines, regressionChannel } from '@/lib/analysis/drawing'
 import { resolveDateRef, resolveRange } from '@/lib/dates'
 import { useChartStore, type ChartState } from '@/stores/chartStore'
 import { describeCondition } from './describe'
@@ -23,6 +24,30 @@ export type StoreApi = { getState: () => ChartState }
 
 function fail(type: ChartCommandType, messageKey: MessageKey): CommandResult {
   return { type, labelKey: 'cmd.failed', status: 'error', messageKey }
+}
+
+/**
+ * Bars a drawing covers when the user named no window. Anchoring on the whole
+ * loaded history puts a retracement on a three-year-old high, which is never
+ * what "draw the fib" means — a chartist works on the recent swing.
+ */
+export const DEFAULT_DRAWING_BARS = 200
+
+/** Restricts a drawing to the window the user named, or to the recent past. */
+export function scopedCandles(
+  candles: Candle[],
+  range: { from?: string; to?: string } | undefined,
+): Candle[] {
+  const resolved = resolveRange(range)
+  if (!resolved) return candles.slice(-DEFAULT_DRAWING_BARS)
+
+  const scoped = candles.filter(
+    (c) =>
+      (resolved.from === undefined || c.time >= resolved.from) &&
+      (resolved.to === undefined || c.time <= resolved.to),
+  )
+  // Too small a slice would produce a meaningless fit; widen to the default.
+  return scoped.length >= 20 ? scoped : candles.slice(-DEFAULT_DRAWING_BARS)
 }
 
 export function executeCommand(
@@ -178,6 +203,90 @@ export function executeCommand(
       const scope = command.scope ?? 'all'
       store.clear(scope)
       return { type: command.type, labelKey: 'cmd.cleared', detail: scope, status: 'ok' }
+    }
+
+    case 'DRAW_TRENDLINE': {
+      const scoped = scopedCandles(candles, command.range)
+      const wanted = command.kind ?? 'both'
+      const lines = findTrendlines(scoped, {
+        maxLines: command.maxLines ?? (wanted === 'both' ? 2 : 1),
+      }).filter((line) => wanted === 'both' || line.kind === wanted)
+
+      store.replaceDrawings(
+        'trendline',
+        lines.map((line) => ({ kind: 'trendline' as const, line })),
+      )
+      const broken = lines.filter((line) => line.brokenAt !== undefined).length
+      return {
+        type: command.type,
+        labelKey: 'cmd.trendline',
+        detail: lines
+          .map((line) => `${line.kind} · ${line.touches} touches${line.brokenAt ? ' · broken' : ''}`)
+          .join(', '),
+        count: lines.length,
+        status: lines.length > 0 ? 'ok' : 'empty',
+        ...(lines.length === 0 ? { messageKey: 'msg.noTrendline' as const } : {}),
+        ...(broken > 0 ? { messageKey: 'msg.trendlineBroken' as const } : {}),
+      }
+    }
+
+    case 'DRAW_FIBONACCI': {
+      const scoped = scopedCandles(candles, command.range)
+      const fib = fibonacciRetracement(scoped, { extend: command.extend ?? false })
+      if (!fib) {
+        store.replaceDrawings('fibonacci', [])
+        return {
+          type: command.type,
+          labelKey: 'cmd.fibonacci',
+          status: 'empty',
+          messageKey: 'msg.noSwing',
+        }
+      }
+      store.replaceDrawings('fibonacci', [{ kind: 'fibonacci', fib }])
+      return {
+        type: command.type,
+        labelKey: 'cmd.fibonacci',
+        detail: `${fib.direction} · ${fib.from.price.toFixed(2)} → ${fib.to.price.toFixed(2)}`,
+        count: fib.levels.length,
+        status: 'ok',
+      }
+    }
+
+    case 'DRAW_REGRESSION_CHANNEL': {
+      const scoped = scopedCandles(candles, command.range)
+      const channel = regressionChannel(scoped, command.deviations ?? 2)
+      if (!channel) {
+        store.replaceDrawings('channel', [])
+        return {
+          type: command.type,
+          labelKey: 'cmd.channel',
+          status: 'empty',
+          messageKey: 'msg.noChannel',
+        }
+      }
+      store.replaceDrawings('channel', [{ kind: 'channel', channel }])
+      return {
+        type: command.type,
+        labelKey: 'cmd.channel',
+        detail: `${channel.slope >= 0 ? '↗' : '↘'} R² ${channel.fit.toFixed(2)}`,
+        status: 'ok',
+      }
+    }
+
+    case 'ADD_VERTICAL_LINE': {
+      const time = resolveDateRef(command.date)
+      if (time === null) return fail(command.type, 'msg.badRange')
+      store.addVerticalLine({
+        time,
+        label: command.label ?? command.date,
+        color: command.color ?? '#a78bfa',
+      })
+      return {
+        type: command.type,
+        labelKey: 'cmd.verticalLine',
+        detail: command.date,
+        status: 'ok',
+      }
     }
 
     case 'FIND_SUPPORT_RESISTANCE': {

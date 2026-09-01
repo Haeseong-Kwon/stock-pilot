@@ -119,6 +119,28 @@ All of them are usable **inside signal conditions**, not just as chart overlays,
   "right": 20 }
 ```
 
+### Drawing
+
+The product's premise is that **you never draw anything yourself**, so the drawing has to be both
+richer and more accurate than what a person would sketch. The same rule as everywhere else applies,
+and it matters most here: **the model never supplies coordinates.** It sends intent; the engine
+finds the anchors in the real candles.
+
+| Command | What the engine computes |
+| --- | --- |
+| `DRAW_TRENDLINE` | Fits lines through pivot highs/lows, keeps only lines price never broke *between* their anchors, ranks by touch count, and reports where an extended line was later breached |
+| `DRAW_FIBONACCI` | Anchors on the dominant swing in the window, 0/23.6/38.2/50/61.8/78.6/100 % (+1.272/1.618 on request) |
+| `DRAW_REGRESSION_CHANNEL` | Least-squares fit ± the residual standard deviation, with R² reported |
+| `ADD_VERTICAL_LINE` | A date the **user** named |
+
+A trendline that has already been broken is drawn dashed and reported as broken, rather than being
+extended as if it still held. With no window named, a drawing covers the recent ~200 bars — putting
+a retracement on a three-year-old high is never what "draw the fib" means.
+
+Verified against live BTCUSDT: the resistance line touched 4 pivots over 103 bars with **zero**
+candles crossing it, the support line 3, and the Fibonacci anchored exactly on the window's real
+high and low.
+
 ### The signal DSL
 
 Conditions are a small AST, not free text:

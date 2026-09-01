@@ -30,6 +30,7 @@ const baseContext: ChartContext = {
   barCount: candles.length,
   indicators: [],
   signals: [],
+  drawings: [],
 }
 
 const withSignal: ChartContext = {

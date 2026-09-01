@@ -103,6 +103,7 @@ describe('demo parser understands streaks', () => {
     barCount: 500,
     indicators: [],
     signals: [],
+    drawings: [],
   }
 
   it('builds one LAG clause per bar', () => {

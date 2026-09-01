@@ -103,6 +103,7 @@ export function FinancialChart({ candles, loading, error, onRetry }: Props) {
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const indicatorSeriesRef = useRef<ISeriesApi<SeriesType>[]>([])
   const priceLinesRef = useRef<IPriceLine[]>([])
+  const drawingSeriesRef = useRef<ISeriesApi<SeriesType>[]>([])
 
   const t = useT()
   const indicators = useChartStore((s) => s.indicators)
@@ -111,6 +112,8 @@ export function FinancialChart({ candles, loading, error, onRetry }: Props) {
   const highlights = useChartStore((s) => s.highlights)
   const levels = useChartStore((s) => s.levels)
   const zoomRequest = useChartStore((s) => s.zoomRequest)
+  const drawings = useChartStore((s) => s.drawings)
+  const verticalLines = useChartStore((s) => s.verticalLines)
   const chartType = useChartStore((s) => s.chartType)
   const priceScaleMode = useChartStore((s) => s.priceScaleMode)
   const rangePreset = useChartStore((s) => s.rangePreset)
@@ -172,6 +175,7 @@ export function FinancialChart({ candles, loading, error, onRetry }: Props) {
     return () => {
       markersRef.current = null
       indicatorSeriesRef.current = []
+      drawingSeriesRef.current = []
       priceLinesRef.current = []
       candleSeriesRef.current = null
       volumeSeriesRef.current = null
@@ -363,6 +367,93 @@ export function FinancialChart({ candles, loading, error, onRetry }: Props) {
     }
   }, [priceLines, levels, seriesEpoch])
 
+  /* ---------- AI drawings: trendlines, fib, channel ---------- */
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+
+    for (const series of drawingSeriesRef.current) chart.removeSeries(series)
+    drawingSeriesRef.current = []
+    if (candles.length === 0) return
+
+    /** A straight line is just a two-point line series. */
+    const segment = (
+      a: { time: number; price: number },
+      b: { time: number; price: number },
+      color: string,
+      style: LineStyle,
+      width: 1 | 2,
+      title: string,
+    ) => {
+      if (a.time === b.time) return
+      const series = chart.addSeries(
+        LineSeries,
+        {
+          color,
+          lineWidth: width,
+          lineStyle: style,
+          priceLineVisible: false,
+          lastValueVisible: Boolean(title),
+          crosshairMarkerVisible: false,
+          title,
+        },
+        0,
+      )
+      series.setData([
+        { time: a.time as UTCTimestamp, value: a.price },
+        { time: b.time as UTCTimestamp, value: b.price },
+      ])
+      drawingSeriesRef.current.push(series)
+    }
+
+    for (const drawing of drawings) {
+      if (drawing.kind === 'trendline') {
+        const { line } = drawing
+        const color = line.kind === 'resistance' ? '#ef5350' : '#26a69a'
+        // A broken line is drawn dashed, so it never reads as still holding.
+        const style = line.brokenAt === undefined ? LineStyle.Solid : LineStyle.Dashed
+        segment(line.from, line.to, color, style, 2, `${line.kind} ·${line.touches}`)
+      }
+
+      if (drawing.kind === 'fibonacci') {
+        const { fib } = drawing
+        for (const level of fib.levels) {
+          const key = level.ratio === 0 || level.ratio === 1
+          segment(
+            { time: fib.from.time, price: level.price },
+            { time: candles[candles.length - 1]?.time ?? fib.to.time, price: level.price },
+            key ? '#a78bfa' : 'rgba(167, 139, 250, 0.55)',
+            key ? LineStyle.Solid : LineStyle.Dotted,
+            1,
+            `${(level.ratio * 100).toFixed(1)}%`,
+          )
+        }
+      }
+
+      if (drawing.kind === 'channel') {
+        const { channel } = drawing
+        segment(
+          { time: channel.from.time, price: channel.from.center },
+          { time: channel.to.time, price: channel.to.center },
+          '#f0b429',
+          LineStyle.Solid,
+          1,
+          'mid',
+        )
+        for (const edge of ['upper', 'lower'] as const) {
+          segment(
+            { time: channel.from.time, price: channel.from[edge] },
+            { time: channel.to.time, price: channel.to[edge] },
+            'rgba(240, 180, 41, 0.5)',
+            LineStyle.Dashed,
+            1,
+            edge,
+          )
+        }
+      }
+    }
+  }, [drawings, candles, seriesEpoch])
+
   /* ---------- zoom ---------- */
   useEffect(() => {
     const chart = chartRef.current
@@ -397,8 +488,14 @@ export function FinancialChart({ candles, loading, error, onRetry }: Props) {
       if (left === null || right === null) return []
       return [{ id: h.id, left: Math.min(left, right), width: Math.abs(right - left), label: h.label, color: h.color }]
     })
-    setBands(next)
-  }, [highlights])
+    // A vertical line is a band with no width.
+    const marks = verticalLines.flatMap((v) => {
+      const x = scale.timeToCoordinate(v.time as UTCTimestamp)
+      if (x === null) return []
+      return [{ id: v.id, left: x, width: 0, label: v.label, color: v.color }]
+    })
+    setBands([...next, ...marks])
+  }, [highlights, verticalLines])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -407,7 +504,7 @@ export function FinancialChart({ candles, loading, error, onRetry }: Props) {
     scale.subscribeVisibleLogicalRangeChange(syncBands)
     syncBands()
     return () => scale.unsubscribeVisibleLogicalRangeChange(syncBands)
-  }, [syncBands, candles])
+  }, [syncBands, candles, drawings])
 
   /* ---------- keyboard ---------- */
   useEffect(() => {
@@ -457,8 +554,9 @@ export function FinancialChart({ candles, loading, error, onRetry }: Props) {
             style={{
               left: band.left,
               width: band.width,
-              background: `${band.color}14`,
-              borderColor: `${band.color}55`,
+              background: band.width > 0 ? `${band.color}14` : 'transparent',
+              borderColor: band.width > 0 ? `${band.color}55` : band.color,
+              borderLeftStyle: band.width > 0 ? 'solid' : 'dashed',
             }}
           >
             <span className="absolute top-1 left-1 rounded-sm bg-raised/90 px-1.5 py-0.5 text-[10px] text-muted">

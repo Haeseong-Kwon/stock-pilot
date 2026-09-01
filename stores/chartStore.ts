@@ -5,6 +5,7 @@ import type { Timeframe } from '@/lib/types'
 import type { Condition } from '@/lib/schemas/expression'
 import type { IndicatorParams, IndicatorType } from '@/lib/schemas/chartCommand'
 import type { Level } from '@/lib/analysis/signals'
+import type { FibonacciRetracement, RegressionChannel, Trendline } from '@/lib/analysis/drawing'
 import { normalizeIndicator, type IndicatorDef } from '@/lib/chart/indicators'
 import type { ChartType, PriceScaleModeName } from '@/lib/chart/chartTypes'
 import type { RangePreset } from '@/lib/chart/ranges'
@@ -21,6 +22,20 @@ export type SignalDef = {
 }
 
 export type PriceLineDef = { id: string; price: number; label: string; color: string }
+export type VerticalLineDef = { id: string; time: number; label: string; color: string }
+
+/** Everything the AI draws. Anchors always come from the analysis engine. */
+export type Drawing =
+  | { id: string; kind: 'trendline'; line: Trendline }
+  | { id: string; kind: 'fibonacci'; fib: FibonacciRetracement }
+  | { id: string; kind: 'channel'; channel: RegressionChannel }
+
+/**
+ * `Omit<Drawing, 'id'>` collapses a discriminated union to its shared keys, so
+ * distribute over the members instead.
+ */
+type WithoutId<T> = T extends { id: string } ? Omit<T, 'id'> : never
+export type DrawingInput = WithoutId<Drawing>
 export type HighlightDef = { id: string; from: number; to: number; label: string; color: string }
 export type ZoomRequest = { from: number; to?: number; nonce: number }
 
@@ -41,6 +56,8 @@ export type ChartState = {
   priceLines: PriceLineDef[]
   highlights: HighlightDef[]
   levels: Level[]
+  drawings: Drawing[]
+  verticalLines: VerticalLineDef[]
   zoomRequest: ZoomRequest | null
 
   setSymbol: (symbol: string) => void
@@ -65,6 +82,9 @@ export type ChartState = {
   addPriceLine: (line: Omit<PriceLineDef, 'id'>) => void
   addHighlight: (highlight: Omit<HighlightDef, 'id'>) => void
   setLevels: (levels: Level[]) => void
+  addDrawing: (drawing: DrawingInput) => void
+  replaceDrawings: (kind: Drawing['kind'], drawings: DrawingInput[]) => void
+  addVerticalLine: (line: Omit<VerticalLineDef, 'id'>) => void
   requestZoom: (from: number, to?: number) => void
   clear: (scope: ClearScope) => void
 }
@@ -84,6 +104,8 @@ export const useChartStore = create<ChartState>()((set, get) => ({
   priceLines: [],
   highlights: [],
   levels: [],
+  drawings: [],
+  verticalLines: [],
   zoomRequest: null,
 
   setSymbol: (symbol) => {
@@ -97,11 +119,14 @@ export const useChartStore = create<ChartState>()((set, get) => ({
       priceLines: [],
       highlights: [],
       levels: [],
+      drawings: [],
+      verticalLines: [],
       zoomRequest: null,
     })
   },
 
-  setTimeframe: (timeframe) => set({ timeframe, levels: [], zoomRequest: null }),
+  setTimeframe: (timeframe) =>
+    set({ timeframe, levels: [], drawings: [], verticalLines: [], zoomRequest: null }),
 
   setChartType: (chartType) => set({ chartType }),
   setPriceScaleMode: (priceScaleMode) => set({ priceScaleMode }),
@@ -137,6 +162,8 @@ export const useChartStore = create<ChartState>()((set, get) => ({
       priceLines: [],
       highlights: [],
       levels: [],
+      drawings: [],
+      verticalLines: [],
       zoomRequest: null,
     })
   },
@@ -229,6 +256,21 @@ export const useChartStore = create<ChartState>()((set, get) => ({
 
   setLevels: (levels) => set({ levels }),
 
+  addDrawing: (drawing) =>
+    set((state) => ({ drawings: [...state.drawings, { ...drawing, id: nextId('draw') }] })),
+
+  // Re-running the same kind of drawing replaces it rather than stacking copies.
+  replaceDrawings: (kind, drawings) =>
+    set((state) => ({
+      drawings: [
+        ...state.drawings.filter((d) => d.kind !== kind),
+        ...drawings.map((d) => ({ ...d, id: nextId('draw') })),
+      ],
+    })),
+
+  addVerticalLine: (line) =>
+    set((state) => ({ verticalLines: [...state.verticalLines, { ...line, id: nextId('vline') }] })),
+
   requestZoom: (from, to) => set({ zoomRequest: { from, to, nonce: ++counter } }),
 
   clear: (scope) =>
@@ -237,14 +279,21 @@ export const useChartStore = create<ChartState>()((set, get) => ({
         case 'signals':
           return { signals: [] }
         case 'lines':
-          return { priceLines: [], levels: [] }
+          return { priceLines: [], levels: [], drawings: [], verticalLines: [] }
         case 'highlights':
           return { highlights: [] }
         case 'indicators':
           return { indicators: [] }
         case 'all':
         default:
-          return { signals: [], priceLines: [], highlights: [], levels: [] }
+          return {
+            signals: [],
+            priceLines: [],
+            highlights: [],
+            levels: [],
+            drawings: [],
+            verticalLines: [],
+          }
       }
     }),
 }))

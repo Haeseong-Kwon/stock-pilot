@@ -5,7 +5,7 @@ import {
   type ChartCommand,
 } from '@/lib/schemas/chartCommand'
 import { ChatRequestSchema, type ChartContext } from '@/lib/ai/context'
-import { buildContextMessage, SYSTEM_PROMPT } from '@/lib/ai/prompts'
+import { buildContextMessage, SYSTEM_PROMPT, toModelMessages } from '@/lib/ai/prompts'
 import { getLlmProvider } from '@/lib/ai/provider'
 import { parseLocally } from '@/lib/ai/localParser'
 import { translator, type Locale } from '@/lib/i18n/messages'
@@ -53,10 +53,16 @@ function ndjson(events: () => AsyncGenerator<StreamEvent>): Response {
   })
 }
 
-function localFallback(prompt: string, context: ChartContext, locale: Locale, emptyKey: 'reply.invalid' | 'reply.providerDownEmpty'): StreamEvent {
+function localFallback(
+  prompt: string,
+  context: ChartContext,
+  locale: Locale,
+  emptyKey: 'reply.invalid' | 'reply.providerDownEmpty',
+  suffixKey: 'reply.providerDown' | 'reply.unusable' | null = null,
+): StreamEvent {
   const t = translator(locale)
   const parsed = parseLocally(prompt, context, locale)
-  const suffix = emptyKey === 'reply.providerDownEmpty' ? ` ${t('reply.providerDown')}` : ''
+  const suffix = suffixKey ? ` ${t(suffixKey)}` : ''
   return {
     type: 'done',
     mode: 'fallback',
@@ -106,7 +112,7 @@ export async function POST(request: Request) {
         [
           { role: 'user', content: `Chart state:\n${buildContextMessage(context, locale)}` },
           { role: 'assistant', content: '{"reply":"Understood — chart state noted.","commands":[]}' },
-          ...messages,
+          ...toModelMessages(messages),
         ],
         (replySoFar) => {
           pending.push(replySoFar)
@@ -137,14 +143,23 @@ export async function POST(request: Request) {
     const settled = finished as { raw: unknown } | { error: unknown }
     if ('error' in settled) {
       console.error('[api/ai/chat]', settled.error)
-      yield localFallback(lastUser.content, context, locale, 'reply.providerDownEmpty')
+      // "Cannot reach the provider" is wrong when it answered, just not in JSON.
+      const unusable =
+        settled.error instanceof Error && /JSON/.test(settled.error.message)
+      yield localFallback(
+        lastUser.content,
+        context,
+        locale,
+        unusable ? 'reply.invalid' : 'reply.providerDownEmpty',
+        unusable ? 'reply.unusable' : 'reply.providerDown',
+      )
       return
     }
 
     const envelope = AiEnvelopeSchema.safeParse(settled.raw)
     if (!envelope.success) {
       console.error('[api/ai/chat] envelope rejection:', envelope.error.issues.slice(0, 3))
-      yield localFallback(lastUser.content, context, locale, 'reply.invalid')
+      yield localFallback(lastUser.content, context, locale, 'reply.invalid', 'reply.unusable')
       return
     }
 
@@ -168,7 +183,7 @@ export async function POST(request: Request) {
 
     // Everything the model asked for was invalid — try the rule-based parser instead.
     if (commands.length === 0 && dropped > 0) {
-      yield localFallback(lastUser.content, context, locale, 'reply.invalid')
+      yield localFallback(lastUser.content, context, locale, 'reply.invalid', 'reply.unusable')
       return
     }
 

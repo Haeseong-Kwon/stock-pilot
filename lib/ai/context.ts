@@ -21,6 +21,8 @@ export const ChartContextSchema = z.object({
     .array(z.object({ name: z.string().max(60), condition: ConditionSchema }))
     .max(10)
     .default([]),
+  /** Drawings already on the chart, so the model does not re-issue them. */
+  drawings: z.array(z.enum(['trendline', 'fibonacci', 'channel', 'verticalLine'])).max(8).default([]),
 })
 export type ChartContext = z.infer<typeof ChartContextSchema>
 
@@ -44,6 +46,7 @@ type ContextInput = {
   candles: Candle[]
   indicators: Array<{ type: IndicatorType; params: IndicatorParams }>
   signals: Array<{ name: string; condition: Condition }>
+  drawings?: ChartContext['drawings']
 }
 
 /**
@@ -57,6 +60,7 @@ export function buildChartContext({
   candles,
   indicators,
   signals,
+  drawings = [],
 }: ContextInput): ChartContext {
   const first = candles[0]
   const last = candles[candles.length - 1]
@@ -68,5 +72,6 @@ export function buildChartContext({
     ...(last ? { lastBarDate: formatDate(last.time), lastPrice: last.close } : {}),
     indicators: indicators.slice(-MAX_CONTEXT_INDICATORS),
     signals: signals.slice(-MAX_CONTEXT_SIGNALS),
+    drawings: [...new Set(drawings)],
   }
 }

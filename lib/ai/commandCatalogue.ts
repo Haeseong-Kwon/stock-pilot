@@ -291,6 +291,42 @@ export const COMMAND_CATALOGUE: CatalogueGroup[] = [
         produces: 'FIND_SUPPORT_RESISTANCE',
       },
       {
+        id: 'trendline',
+        prompt: { ko: '추세선 그려줘', en: 'draw the trendlines' },
+        effect: {
+          ko: '고점·저점을 잇는 선을 찾아 그립니다 — 좌표는 엔진이 계산합니다',
+          en: 'Fits lines through the real pivots — the engine picks the anchors',
+        },
+        produces: 'DRAW_TRENDLINE',
+      },
+      {
+        id: 'trendlineResistance',
+        prompt: { ko: '저항 추세선만 그려줘', en: 'draw the resistance trendline only' },
+        effect: { ko: '하락 추세의 천장', en: 'The ceiling of a downtrend' },
+        produces: 'DRAW_TRENDLINE',
+      },
+      {
+        id: 'fibonacci',
+        prompt: { ko: '피보나치 되돌림 그려줘', en: 'draw the Fibonacci retracement' },
+        effect: {
+          ko: '구간의 지배적 스윙에 0·23.6·38.2·50·61.8·78.6·100% 를 겁니다',
+          en: 'Anchors the standard ratios on the dominant swing',
+        },
+        produces: 'DRAW_FIBONACCI',
+      },
+      {
+        id: 'channel',
+        prompt: { ko: '회귀 채널 그려줘', en: 'draw the regression channel' },
+        effect: { ko: '최소제곱 추세선 ± 잔차 표준편차', en: 'Least-squares trend ± residual stdev' },
+        produces: 'DRAW_REGRESSION_CHANNEL',
+      },
+      {
+        id: 'verticalLine',
+        prompt: { ko: '2025년 4월 7일에 수직선 그어줘', en: 'mark 2025-04-07 with a vertical line' },
+        effect: { ko: '지정한 날짜에 세로선', en: 'A vertical marker on that date' },
+        produces: 'ADD_VERTICAL_LINE',
+      },
+      {
         id: 'priceLine',
         prompt: { ko: '77000에 가격선 그어줘', en: 'draw a price line at 77000' },
         effect: { ko: '지정한 가격에 수평선을 놓습니다', en: 'Puts a horizontal line at that price' },

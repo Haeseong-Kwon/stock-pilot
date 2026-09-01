@@ -81,6 +81,31 @@ export const ChartCommandSchema = z.union([
     range: RangeSchema.optional(),
     maxLevels: z.number().int().positive().max(12).optional(),
   }),
+  // Drawing commands carry intent only. The anchors are computed from the
+  // candles, because the model cannot see prices and must not invent them.
+  z.object({
+    type: z.literal('DRAW_TRENDLINE'),
+    kind: z.enum(['support', 'resistance', 'both']).optional(),
+    range: RangeSchema.optional(),
+    maxLines: z.number().int().positive().max(4).optional(),
+  }),
+  z.object({
+    type: z.literal('DRAW_FIBONACCI'),
+    range: RangeSchema.optional(),
+    /** Adds the 1.272 and 1.618 projections beyond the swing. */
+    extend: z.boolean().optional(),
+  }),
+  z.object({
+    type: z.literal('DRAW_REGRESSION_CHANNEL'),
+    range: RangeSchema.optional(),
+    deviations: z.number().positive().max(5).optional(),
+  }),
+  z.object({
+    type: z.literal('ADD_VERTICAL_LINE'),
+    date: DateRef,
+    label: z.string().max(60).optional(),
+    color: z.string().max(32).optional(),
+  }),
 ])
 
 export type ChartCommand = z.infer<typeof ChartCommandSchema>

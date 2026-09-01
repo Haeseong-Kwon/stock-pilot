@@ -60,6 +60,14 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
               candles: bars,
               indicators: chart.indicators.map((i) => ({ type: i.type, params: i.params })),
               signals: chart.signals.map((s) => ({ name: s.name, condition: s.condition })),
+              drawings: [
+                ...chart.drawings.map((d) =>
+                  d.kind === 'trendline' ? ('trendline' as const)
+                  : d.kind === 'fibonacci' ? ('fibonacci' as const)
+                  : ('channel' as const),
+                ),
+                ...(chart.verticalLines.length > 0 ? (['verticalLine'] as const) : []),
+              ],
             }),
           }),
         })

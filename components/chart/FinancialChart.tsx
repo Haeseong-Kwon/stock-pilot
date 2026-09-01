@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AreaSeries,
+  BarSeries,
   CandlestickSeries,
   ColorType,
   CrosshairMode,
   HistogramSeries,
   LineSeries,
   LineStyle,
+  PriceScaleMode,
   createChart,
   createSeriesMarkers,
   type IChartApi,
@@ -19,25 +22,83 @@ import {
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts'
+import { RefreshCw } from 'lucide-react'
 import type { Candle } from '@/lib/types'
 import { evaluateSignal, type SignalMatch } from '@/lib/analysis/signals'
 import { buildIndicatorPlots } from '@/lib/chart/series'
+import { candlesForType, isSingleValueType, type ChartType } from '@/lib/chart/chartTypes'
+import { rangeFor } from '@/lib/chart/ranges'
 import { useChartStore, type SignalDef } from '@/stores/chartStore'
 import { useT } from '@/stores/localeStore'
 import { ChartLegend } from './ChartLegend'
+import { DataWindow } from './DataWindow'
 import { SignalTooltip } from './SignalTooltip'
 
 /** Price pane gets this many times the height of one indicator pane. */
 const PRICE_PANE_STRETCH = 5
 
-type Props = { candles: Candle[]; loading: boolean; error?: string | null }
+const SCALE_MODES: Record<string, PriceScaleMode> = {
+  normal: PriceScaleMode.Normal,
+  logarithmic: PriceScaleMode.Logarithmic,
+  percentage: PriceScaleMode.Percentage,
+  indexedTo100: PriceScaleMode.IndexedTo100,
+}
+
+const UP = '#26a69a'
+const DOWN = '#ef5350'
+
+/** Each chart type is a different series; switching rebuilds it in place. */
+function addPriceSeries(chart: IChartApi, type: ChartType): ISeriesApi<SeriesType> {
+  switch (type) {
+    case 'bars':
+      return chart.addSeries(BarSeries, { upColor: UP, downColor: DOWN, thinBars: false })
+    case 'line':
+      return chart.addSeries(LineSeries, { color: '#4a9eff', lineWidth: 2 })
+    case 'area':
+      return chart.addSeries(AreaSeries, {
+        lineColor: '#4a9eff',
+        topColor: 'rgba(74, 158, 255, 0.35)',
+        bottomColor: 'rgba(74, 158, 255, 0.02)',
+        lineWidth: 2,
+      })
+    case 'hollow':
+      // Hollow candles: up bars are outlined, down bars filled.
+      return chart.addSeries(CandlestickSeries, {
+        upColor: 'rgba(0,0,0,0)',
+        downColor: DOWN,
+        wickUpColor: UP,
+        wickDownColor: DOWN,
+        borderVisible: true,
+        borderUpColor: UP,
+        borderDownColor: DOWN,
+      })
+    case 'candles':
+    case 'heikinAshi':
+    default:
+      return chart.addSeries(CandlestickSeries, {
+        upColor: UP,
+        downColor: DOWN,
+        wickUpColor: UP,
+        wickDownColor: DOWN,
+        borderVisible: false,
+        priceLineColor: '#3a465c',
+      })
+  }
+}
+
+type Props = {
+  candles: Candle[]
+  loading: boolean
+  error?: string | null
+  onRetry?: () => void
+}
 
 export type SignalHit = SignalMatch & { signal: SignalDef }
 
-export function FinancialChart({ candles, loading, error }: Props) {
+export function FinancialChart({ candles, loading, error, onRetry }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const candleSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null)
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const indicatorSeriesRef = useRef<ISeriesApi<SeriesType>[]>([])
@@ -50,8 +111,14 @@ export function FinancialChart({ candles, loading, error }: Props) {
   const highlights = useChartStore((s) => s.highlights)
   const levels = useChartStore((s) => s.levels)
   const zoomRequest = useChartStore((s) => s.zoomRequest)
+  const chartType = useChartStore((s) => s.chartType)
+  const priceScaleMode = useChartStore((s) => s.priceScaleMode)
+  const rangePreset = useChartStore((s) => s.rangePreset)
 
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  // Bumped whenever the price series is recreated, so dependent effects re-run.
+  const [seriesEpoch, setSeriesEpoch] = useState(0)
+  const [dataWindow, setDataWindow] = useState(false)
   const [bands, setBands] = useState<Array<{ id: string; left: number; width: number; label: string; color: string }>>([])
 
   const plots = useMemo(() => buildIndicatorPlots(candles, indicators), [candles, indicators])
@@ -91,16 +158,6 @@ export function FinancialChart({ candles, loading, error }: Props) {
       autoSize: true,
     })
 
-    const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#26a69a',
-      downColor: '#ef5350',
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
-      borderVisible: false,
-      priceLineColor: '#3a465c',
-      lastValueVisible: true,
-    })
-
     const volumeSeries = chart.addSeries(HistogramSeries, {
       priceScaleId: 'volume',
       priceFormat: { type: 'volume' },
@@ -110,9 +167,7 @@ export function FinancialChart({ candles, loading, error }: Props) {
     chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } })
 
     chartRef.current = chart
-    candleSeriesRef.current = candleSeries
     volumeSeriesRef.current = volumeSeries
-    markersRef.current = createSeriesMarkers(candleSeries, [])
 
     return () => {
       markersRef.current = null
@@ -125,21 +180,54 @@ export function FinancialChart({ candles, loading, error }: Props) {
     }
   }, [])
 
+  /* ---------- price series: rebuilt when the chart type changes ---------- */
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+
+    const existing = candleSeriesRef.current
+    if (existing) {
+      markersRef.current = null
+      priceLinesRef.current = []
+      chart.removeSeries(existing)
+    }
+
+    const series = addPriceSeries(chart, chartType)
+    candleSeriesRef.current = series
+    markersRef.current = createSeriesMarkers(series, [])
+    setSeriesEpoch((value) => value + 1)
+  }, [chartType])
+
+  /* ---------- price scale mode ---------- */
+  useEffect(() => {
+    // Scope this to the price series' own scale. `chart.priceScale('right')`
+    // reaches every pane, and a log axis on MACD (which goes negative) or on a
+    // bounded 0..100 oscillator is meaningless.
+    candleSeriesRef.current?.priceScale().applyOptions({ mode: SCALE_MODES[priceScaleMode] })
+  }, [priceScaleMode, seriesEpoch])
+
   /* ---------- price + volume data ---------- */
   useEffect(() => {
     const candleSeries = candleSeriesRef.current
     const volumeSeries = volumeSeriesRef.current
     if (!candleSeries || !volumeSeries) return
 
-    candleSeries.setData(
-      candles.map((c) => ({
-        time: c.time as UTCTimestamp,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-      })),
-    )
+    const drawn = candlesForType(candles, chartType)
+    if (isSingleValueType(chartType)) {
+      candleSeries.setData(
+        drawn.map((c) => ({ time: c.time as UTCTimestamp, value: c.close })),
+      )
+    } else {
+      candleSeries.setData(
+        drawn.map((c) => ({
+          time: c.time as UTCTimestamp,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+        })),
+      )
+    }
     volumeSeries.setData(
       candles.map((c) => ({
         time: c.time as UTCTimestamp,
@@ -148,7 +236,7 @@ export function FinancialChart({ candles, loading, error }: Props) {
       })),
     )
     chartRef.current?.timeScale().fitContent()
-  }, [candles])
+  }, [candles, chartType, seriesEpoch])
 
   /* ---------- indicators ---------- */
   useEffect(() => {
@@ -224,7 +312,7 @@ export function FinancialChart({ candles, loading, error }: Props) {
     for (let i = 0; i < panes.length; i++) {
       panes[i]?.setStretchFactor(i === 0 ? PRICE_PANE_STRETCH : 1)
     }
-  }, [plots])
+  }, [plots, seriesEpoch])
 
   /* ---------- signal markers ---------- */
   useEffect(() => {
@@ -240,7 +328,7 @@ export function FinancialChart({ candles, loading, error }: Props) {
         size: 1,
       })),
     )
-  }, [hits])
+  }, [hits, seriesEpoch])
 
   /* ---------- price lines & S/R levels ---------- */
   useEffect(() => {
@@ -273,7 +361,7 @@ export function FinancialChart({ candles, loading, error }: Props) {
         }),
       )
     }
-  }, [priceLines, levels])
+  }, [priceLines, levels, seriesEpoch])
 
   /* ---------- zoom ---------- */
   useEffect(() => {
@@ -285,6 +373,15 @@ export function FinancialChart({ candles, loading, error }: Props) {
       to: (zoomRequest.to ?? last?.time ?? zoomRequest.from) as UTCTimestamp,
     })
   }, [zoomRequest, candles])
+
+  /* ---------- range presets ---------- */
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart || candles.length === 0 || !rangePreset) return
+    const range = rangeFor(rangePreset, candles)
+    if (!range) chart.timeScale().fitContent()
+    else chart.timeScale().setVisibleRange({ from: range.from as UTCTimestamp, to: range.to as UTCTimestamp })
+  }, [rangePreset, candles])
 
   /* ---------- highlight bands ---------- */
   const syncBands = useCallback(() => {
@@ -311,6 +408,23 @@ export function FinancialChart({ candles, loading, error }: Props) {
     syncBands()
     return () => scale.unsubscribeVisibleLogicalRangeChange(syncBands)
   }, [syncBands, candles])
+
+  /* ---------- keyboard ---------- */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      // Never steal a key from the prompt box or the symbol search.
+      if (target && /^(INPUT|TEXTAREA)$/.test(target.tagName)) return
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      if (event.key === 'd' || event.key === 'D') setDataWindow((v) => !v)
+      if (event.key === 'l' || event.key === 'L') {
+        const store = useChartStore.getState()
+        store.setPriceScaleMode(store.priceScaleMode === 'logarithmic' ? 'normal' : 'logarithmic')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   /* ---------- crosshair ---------- */
   useEffect(() => {
@@ -356,6 +470,15 @@ export function FinancialChart({ candles, loading, error }: Props) {
 
       <ChartLegend candles={candles} hoverIndex={hoverIndex} plots={plots} />
       {activeHits.length > 0 && hoverCandle ? <SignalTooltip hits={activeHits} /> : null}
+      {dataWindow ? (
+        <DataWindow
+          candles={candles}
+          hoverIndex={hoverIndex}
+          plots={plots}
+          hits={activeHits}
+          onClose={() => setDataWindow(false)}
+        />
+      ) : null}
 
       {loading ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-base/70 backdrop-blur-[1px]">
@@ -371,6 +494,16 @@ export function FinancialChart({ candles, loading, error }: Props) {
           <div className="max-w-sm rounded-md border border-line bg-surface px-4 py-3 text-center">
             <p className="text-sm text-down">{t('chart.error.title')}</p>
             <p className="mt-1 text-xs text-muted">{error}</p>
+            {onRetry ? (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-raised px-3 py-1.5 text-[11.5px] text-muted transition-colors hover:border-accent/40 hover:text-text"
+              >
+                <RefreshCw className="h-3 w-3" />
+                {t('chart.retry')}
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useChartStore } from '@/stores/chartStore'
 import { useLocaleStore } from '@/stores/localeStore'
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -17,9 +18,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
         },
       }),
   )
-  // Read the saved language after mount so the server and first paint agree on the default.
+  // Read saved preferences after mount so the server and first paint agree on defaults.
   useEffect(() => {
     useLocaleStore.getState().hydrate()
+    useChartStore.getState().hydrate()
   }, [])
 
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>

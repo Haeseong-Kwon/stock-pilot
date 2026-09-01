@@ -15,15 +15,29 @@ export function SymbolSearch() {
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const recentSymbols = useChartStore((s) => s.recentSymbols)
+
   const results = useMemo(() => {
     const matches = searchCatalogue(query)
     const typed = query.trim().toUpperCase()
+    if (!typed) {
+      // Nothing typed yet: lead with what this user actually looks at.
+      const recent = recentSymbols
+        .map((code) => SYMBOL_CATALOGUE.find((s) => s.symbol === code) ?? {
+          symbol: code,
+          name: t('search.recent'),
+          kind: 'stock' as const,
+        })
+        .slice(0, 5)
+      const rest = matches.filter((m) => !recentSymbols.includes(m.symbol))
+      return [...recent, ...rest].slice(0, 12)
+    }
     // Any ticker can be requested, not just catalogued ones.
-    if (typed && !matches.some((m) => m.symbol === typed)) {
+    if (!matches.some((m) => m.symbol === typed)) {
       return [{ symbol: typed, name: t('search.useTicker'), kind: 'stock' as const }, ...matches]
     }
     return matches
-  }, [query, t])
+  }, [query, t, recentSymbols])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

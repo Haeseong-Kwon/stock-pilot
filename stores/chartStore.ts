@@ -6,6 +6,9 @@ import type { Condition } from '@/lib/schemas/expression'
 import type { IndicatorParams, IndicatorType } from '@/lib/schemas/chartCommand'
 import type { Level } from '@/lib/analysis/signals'
 import { normalizeIndicator, type IndicatorDef } from '@/lib/chart/indicators'
+import type { ChartType, PriceScaleModeName } from '@/lib/chart/chartTypes'
+import type { RangePreset } from '@/lib/chart/ranges'
+import { clearWorkspace, loadWorkspace, saveWorkspace } from '@/lib/chart/workspace'
 
 export type SignalDef = {
   id: string
@@ -28,6 +31,11 @@ const SIGNAL_COLORS = ['#ef4444', '#22c55e', '#3b82f6', '#eab308', '#a855f7']
 export type ChartState = {
   symbol: string
   timeframe: Timeframe
+  chartType: ChartType
+  priceScaleMode: PriceScaleModeName
+  /** The last range preset the user picked; null once they pan or zoom freely. */
+  rangePreset: RangePreset | null
+  recentSymbols: string[]
   indicators: IndicatorDef[]
   signals: SignalDef[]
   priceLines: PriceLineDef[]
@@ -37,6 +45,12 @@ export type ChartState = {
 
   setSymbol: (symbol: string) => void
   setTimeframe: (timeframe: Timeframe) => void
+  setChartType: (chartType: ChartType) => void
+  setPriceScaleMode: (mode: PriceScaleModeName) => void
+  setRangePreset: (preset: RangePreset | null) => void
+  /** Reads the saved workspace after mount, so SSR and first paint agree. */
+  hydrate: () => void
+  resetWorkspace: () => void
   addIndicator: (type: IndicatorType, params?: IndicatorParams) => IndicatorDef
   removeIndicator: (type: IndicatorType, params?: IndicatorParams) => number
   removeIndicatorById: (id: string) => void
@@ -61,6 +75,10 @@ const nextId = (prefix: string) => `${prefix}-${++counter}`
 export const useChartStore = create<ChartState>()((set, get) => ({
   symbol: 'BTCUSDT',
   timeframe: '1D',
+  chartType: 'candles',
+  priceScaleMode: 'normal',
+  rangePreset: null,
+  recentSymbols: [],
   indicators: [],
   signals: [],
   priceLines: [],
@@ -69,12 +87,59 @@ export const useChartStore = create<ChartState>()((set, get) => ({
   zoomRequest: null,
 
   setSymbol: (symbol) => {
-    if (symbol.toUpperCase() === get().symbol) return
+    const next = symbol.toUpperCase()
+    if (next === get().symbol) return
+    const recent = [get().symbol, ...get().recentSymbols.filter((s) => s !== get().symbol && s !== next)]
     // Annotations are tied to the previous instrument; indicators and signals carry over.
-    set({ symbol: symbol.toUpperCase(), priceLines: [], highlights: [], levels: [], zoomRequest: null })
+    set({
+      symbol: next,
+      recentSymbols: recent.slice(0, 12),
+      priceLines: [],
+      highlights: [],
+      levels: [],
+      zoomRequest: null,
+    })
   },
 
   setTimeframe: (timeframe) => set({ timeframe, levels: [], zoomRequest: null }),
+
+  setChartType: (chartType) => set({ chartType }),
+  setPriceScaleMode: (priceScaleMode) => set({ priceScaleMode }),
+  setRangePreset: (rangePreset) => set({ rangePreset }),
+
+  hydrate: () => {
+    const saved = loadWorkspace()
+    if (!saved) return
+    set({
+      symbol: saved.symbol,
+      timeframe: saved.timeframe,
+      chartType: saved.chartType,
+      priceScaleMode: saved.priceScaleMode,
+      recentSymbols: saved.recentSymbols,
+      indicators: saved.indicators.map((entry, index) =>
+        normalizeIndicator(entry.type, entry.params, index),
+      ),
+      signals: saved.signals.map((signal) => ({ ...signal, id: nextId('signal') })),
+    })
+  },
+
+  resetWorkspace: () => {
+    clearWorkspace()
+    set({
+      symbol: 'BTCUSDT',
+      timeframe: '1D',
+      chartType: 'candles',
+      priceScaleMode: 'normal',
+      rangePreset: null,
+      recentSymbols: [],
+      indicators: [],
+      signals: [],
+      priceLines: [],
+      highlights: [],
+      levels: [],
+      zoomRequest: null,
+    })
+  },
 
   addIndicator: (type, params) => {
     const existing = get().indicators
@@ -183,3 +248,32 @@ export const useChartStore = create<ChartState>()((set, get) => ({
       }
     }),
 }))
+
+/**
+ * Persist whatever a returning user would expect to find. Subscribed rather than
+ * written inside each action, so no future action can forget to save.
+ */
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+useChartStore.subscribe((state) => {
+  if (typeof window === 'undefined') return
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    saveWorkspace({
+      version: 1,
+      symbol: state.symbol,
+      timeframe: state.timeframe,
+      chartType: state.chartType,
+      priceScaleMode: state.priceScaleMode,
+      recentSymbols: state.recentSymbols,
+      indicators: state.indicators.map((i) => ({ type: i.type, params: i.params })),
+      signals: state.signals.map((signal) => ({
+        name: signal.name,
+        condition: signal.condition,
+        ...(signal.range ? { range: signal.range } : {}),
+        color: signal.color,
+        position: signal.position,
+        shape: signal.shape,
+      })),
+    })
+  }, 400)
+})

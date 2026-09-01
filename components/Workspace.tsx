@@ -16,7 +16,7 @@ export function Workspace() {
   const timeframe = useChartStore((s) => s.timeframe)
   const setTimeframe = useChartStore((s) => s.setTimeframe)
 
-  const { data, isPending, error } = useCandles(symbol, timeframe)
+  const { data, isPending, error, refetch } = useCandles(symbol, timeframe)
   const candles = data?.candles ?? []
 
   const available = data?.supportedTimeframes
@@ -61,6 +61,7 @@ export function Workspace() {
               candles={candles}
               loading={isPending}
               error={error instanceof Error ? error.message : null}
+              onRetry={() => void refetch()}
             />
           </div>
         </section>

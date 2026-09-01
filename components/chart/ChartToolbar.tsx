@@ -9,6 +9,9 @@ import { useChartStore } from '@/stores/chartStore'
 import { useLocaleStore, useT } from '@/stores/localeStore'
 import { SymbolSearch } from '@/components/symbol/SymbolSearch'
 import { IndicatorMenu } from './IndicatorMenu'
+import { ChartTypeMenu, PriceScaleMenu } from './ChartSettings'
+import { RangeBar } from './RangeBar'
+import { SymbolStats } from './SymbolStats'
 
 type Props = {
   candles: Candle[]
@@ -47,7 +50,9 @@ export function ChartToolbar({ candles, synthetic, providerId, available }: Prop
         </div>
       ) : null}
 
-      <div className="ml-1 flex items-center rounded-md border border-line bg-raised p-0.5">
+      <SymbolStats candles={candles} />
+
+      <div className="flex items-center rounded-md border border-line bg-raised p-0.5">
         {TIMEFRAMES.map((tf) => {
           const enabled = !available || available.includes(tf)
           return (
@@ -78,6 +83,10 @@ export function ChartToolbar({ candles, synthetic, providerId, available }: Prop
         })}
       </div>
 
+      <RangeBar candles={candles} />
+      <ChartTypeMenu />
+      <PriceScaleMenu />
+
       <div className="ml-auto flex items-center gap-2">
         {synthetic ? (
           <span className="flex items-center gap-1.5 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-400">
@@ -97,6 +106,7 @@ function AboutButton({ providerId }: { providerId?: string }) {
   const ref = useRef<HTMLDivElement>(null)
   const locale = useLocaleStore((s) => s.locale)
   const setLocale = useLocaleStore((s) => s.setLocale)
+  const resetWorkspace = useChartStore((s) => s.resetWorkspace)
   const t = useT()
 
   useEffect(() => {
@@ -144,6 +154,26 @@ function AboutButton({ providerId }: { providerId?: string }) {
             </div>
           </div>
 
+          <div className="border-t border-line pt-2.5 pb-2.5">
+            <p className="pb-1.5 text-[11px] text-faint">{t('about.shortcuts')}</p>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+              {(
+                [
+                  ['⌘K', t('about.shortcutSearch')],
+                  ['D', t('about.shortcutData')],
+                  ['L', t('about.shortcutLog')],
+                ] as const
+              ).map(([key, label]) => (
+                <div key={key} className="contents">
+                  <dt>
+                    <kbd className="rounded border border-line px-1 text-[10px] text-faint">{key}</kbd>
+                  </dt>
+                  <dd className="text-faint">{label}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+
           <div className="border-t border-line pt-2.5">
             <p className="mb-2 text-[12px] font-medium text-text">{t('about.title')}</p>
             <p>{t('about.body')}</p>
@@ -152,6 +182,17 @@ function AboutButton({ providerId }: { providerId?: string }) {
               <span className="text-text">{providerId ?? t('about.unknownProvider')}</span>
             </p>
             <p className="mt-2 text-faint">{t('about.disclaimer')}</p>
+            <button
+              type="button"
+              onClick={() => {
+                resetWorkspace()
+                setOpen(false)
+              }}
+              title={t('about.resetHint')}
+              className="mt-2.5 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-[11px] text-muted transition-colors hover:border-down/40 hover:text-down"
+            >
+              {t('about.reset')}
+            </button>
           </div>
         </div>
       ) : null}

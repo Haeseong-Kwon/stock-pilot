@@ -9,6 +9,14 @@ const ko = {
   'toolbar.indicators': '지표',
   'toolbar.timeframeUnsupported': '{provider}는 {timeframe} 봉을 제공하지 않습니다',
   'toolbar.about': '설정 및 정보',
+  'toolbar.chartType': '차트 종류',
+  'toolbar.priceScale': '가격 축',
+  'toolbar.range': '기간',
+  'stats.dayRange': '당일',
+  'stats.periodRange': '기간',
+  'stats.volume': '거래량',
+  'search.recent': '최근',
+  'chart.retry': '다시 시도',
 
   'about.title': 'ChartPilot 정보',
   'about.body':
@@ -17,6 +25,12 @@ const ko = {
   'about.unknownProvider': '알 수 없음',
   'about.disclaimer': '연구 및 학습용 도구입니다. 투자 자문이 아닙니다.',
   'about.language': '언어',
+  'about.reset': '작업공간 초기화',
+  'about.resetHint': '지표·시그널·차트 설정을 지우고 처음 상태로 되돌립니다.',
+  'about.shortcuts': '단축키',
+  'about.shortcutSearch': '심볼 검색',
+  'about.shortcutData': '데이터 윈도우',
+  'about.shortcutLog': '로그 축 전환',
 
   'search.custom': '직접 입력한 티커',
   'search.placeholder': '심볼 검색 — AAPL, NVDA, BTCUSDT…',
@@ -43,6 +57,9 @@ const ko = {
   'indicators.hint.volatility': '수익률 표준편차 · 별도 패널',
 
   'chart.loading': '시장 데이터를 불러오는 중…',
+  'dataWindow.title': '데이터 윈도우',
+  'dataWindow.close': '데이터 윈도우 닫기',
+  'dataWindow.open': '데이터 윈도우 (D)',
   'chart.error.title': '시장 데이터를 가져올 수 없습니다',
 
   'tooltip.change': '변화율',
@@ -115,6 +132,14 @@ const en: Record<MessageKey, string> = {
   'toolbar.indicators': 'Indicators',
   'toolbar.timeframeUnsupported': '{provider} does not serve {timeframe} bars',
   'toolbar.about': 'Settings and about',
+  'toolbar.chartType': 'Chart type',
+  'toolbar.priceScale': 'Price scale',
+  'toolbar.range': 'Range',
+  'stats.dayRange': 'Day',
+  'stats.periodRange': 'Range',
+  'stats.volume': 'Vol',
+  'search.recent': 'Recent',
+  'chart.retry': 'Retry',
 
   'about.title': 'About ChartPilot',
   'about.body':
@@ -123,6 +148,12 @@ const en: Record<MessageKey, string> = {
   'about.unknownProvider': 'unknown',
   'about.disclaimer': 'For research and education only. Nothing here is investment advice.',
   'about.language': 'Language',
+  'about.reset': 'Reset workspace',
+  'about.resetHint': 'Clears indicators, signals and chart settings back to defaults.',
+  'about.shortcuts': 'Shortcuts',
+  'about.shortcutSearch': 'Symbol search',
+  'about.shortcutData': 'Data window',
+  'about.shortcutLog': 'Toggle log scale',
 
   'search.custom': 'Custom ticker',
   'search.placeholder': 'Search symbol — AAPL, NVDA, BTCUSDT…',
@@ -149,6 +180,9 @@ const en: Record<MessageKey, string> = {
   'indicators.hint.volatility': 'Rolling stdev of returns · own pane',
 
   'chart.loading': 'Loading market data…',
+  'dataWindow.title': 'Data window',
+  'dataWindow.close': 'Close data window',
+  'dataWindow.open': 'Data window (D)',
   'chart.error.title': 'Market data unavailable',
 
   'tooltip.change': 'Change',

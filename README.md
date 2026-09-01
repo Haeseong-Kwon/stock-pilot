@@ -46,6 +46,24 @@ grouped and searchable, each one click away. `tests/catalogue.test.ts` runs ever
 the parser and the executor in both languages, so a row can never advertise something the app
 no longer does.
 
+## Terminal controls
+
+Modelled on what the large commercial platforms treat as table stakes:
+
+| Control | Options |
+| --- | --- |
+| Chart type | Candles, hollow candles, bars, Heikin Ashi, line, area |
+| Price scale | Normal, logarithmic, percent, indexed to 100 — applied to the **price pane only**, so a log axis never lands on MACD or a bounded oscillator |
+| Range presets | 1M, 3M, 6M, YTD, 1Y, 5Y, ALL — presets the loaded history cannot fill are hidden |
+| Data window | `D` — every series' value at the cursor, which the one-line legend stops being able to show once you have several indicators |
+| Symbol stats | Day range, period range with a position marker, volume against its own average |
+| Shortcuts | `⌘K` symbol search, `D` data window, `L` log scale |
+
+The workspace — symbol, timeframe, chart type, scale, indicators, signals and recent symbols —
+is written to `localStorage` and restored on the next visit. It is validated against a schema on
+read, so a stale or hand-edited entry is dropped rather than half-restored, and **Reset workspace**
+in the ⓘ menu clears it.
+
 ## Language
 
 The interface ships in **Korean by default**, switchable to English from the ⓘ button in the top
@@ -172,8 +190,12 @@ ones next to it; anything rejected is reported in the reply and never reaches th
 **Upstream routing.** OpenRouter load-balances one model across many upstream providers, and not
 all of them honour `response_format` — landing on one produced prose instead of JSON and silently
 dropped the request to the rule-based parser (3 of the 21 upstreams serving GLM 5.3 Flash lack it).
-Requests therefore pin `provider: { require_parameters: true }`, and a non-JSON reply is retried
-once before giving up.
+Requests therefore pin `provider: { require_parameters: true }`.
+
+**Unusable JSON.** Perhaps twice in a hundred calls the model closes the object one brace too many
+or drops a bracket. Two defences: the extractor takes the first *balanced* object rather than
+slicing to the last `}`, and anything still unparseable is asked again once (both the streaming and
+non-streaming paths, and the eval harness, so the measured rate is the one users get).
 
 Providers are plain `fetch` calls behind one `LlmProvider` interface (`lib/ai/provider.ts`); no
 vendor SDK leaks into the rest of the app. If the model returns something that fails Zod
@@ -223,7 +245,7 @@ Last run (47 cases, `effort=low`):
 
 | model | accuracy | p50 | p95 | cost/request |
 | --- | --- | --- | --- | --- |
-| `z-ai/glm-5.3-flash` **(default)** | 47/47 | 1,277ms | 6,635ms | **$0.00007** |
+| `z-ai/glm-5.3-flash` **(default)** | 47/47 | 1,476ms | 3,795ms | **$0.00006** |
 
 An earlier 38-case run also had `openai/gpt-5-mini` (38/38, p50 497ms, $0.00074) and
 `deepseek/deepseek-v4-flash` (38/38, p50 1,730ms, $0.00019) at 100%.

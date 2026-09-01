@@ -19,16 +19,45 @@ function env(name: string): string | undefined {
   return value && value.trim() ? value.trim() : undefined
 }
 
+/**
+ * Returns the first *balanced* JSON object in the text. Slicing to the last `}`
+ * looked simpler but breaks on the real failure mode: the model occasionally
+ * emits one closing brace too many, and the extra one made the whole response
+ * unparseable. Depth counting ignores braces inside strings.
+ */
+export function firstJsonObject(text: string): string | null {
+  const start = text.indexOf('{')
+  if (start === -1) return null
+
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let i = start; i < text.length; i++) {
+    const char = text[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') inString = false
+      continue
+    }
+    if (char === '"') inString = true
+    else if (char === '{') depth++
+    else if (char === '}' && --depth === 0) return text.slice(start, i + 1)
+  }
+  return null // never closed — a genuinely truncated response
+}
+
 /** Pulls the first balanced JSON object out of a model response. */
 export function extractJson(text: string): unknown {
   const cleaned = text.replace(/^```(?:json)?/gm, '').replace(/```$/gm, '').trim()
-  const start = cleaned.indexOf('{')
-  const end = cleaned.lastIndexOf('}')
   // Carry a snippet of what actually arrived — a bare "no JSON" is undebuggable.
   const snippet = `${cleaned.length} chars: ${JSON.stringify(cleaned.slice(0, 200))}`
-  if (start === -1 || end <= start) throw new LlmError(`Model did not return JSON (${snippet})`)
+
+  const candidate = firstJsonObject(cleaned)
+  if (candidate === null) throw new LlmError(`Model did not return JSON (${snippet})`)
   try {
-    return JSON.parse(cleaned.slice(start, end + 1))
+    return JSON.parse(candidate)
   } catch {
     throw new LlmError(`Model returned malformed JSON (${snippet})`)
   }
@@ -122,33 +151,39 @@ function openAiCompatible(
       const auth = { Authorization: `Bearer ${apiKey}`, ...extraHeaders }
       const body = {
         model,
-        // Explicit so a runaway response cannot stall the request; a command
-        // envelope is a few hundred tokens even with several clauses.
-        max_tokens: 2048,
+        // Bounded so a runaway response cannot stall the request, but generous:
+        // on a reasoning model the thinking tokens come out of this budget too,
+        // and 2048 truncated long compound conditions mid-JSON.
+        max_tokens: 8192,
         response_format: { type: 'json_object' },
         messages: [{ role: 'system', content: system }, ...messages],
         ...extraBody,
       }
 
-      const once = async () => {
+      const nonStreaming = async () => {
         const payload = (await postJson(url, auth, body)) as OpenAiShape
         const content = payload.choices?.[0]?.message?.content
         if (!content) throw new LlmError('Empty response from model')
         return extractJson(content)
       }
 
-      if (!onProgress) return once()
-
-      const raw = await postSse(url, auth, { ...body, stream: true }, onProgress, (event) => {
-        const choice = (event.choices as Array<{ delta?: { content?: string } }> | undefined)?.[0]
-        return choice?.delta?.content
-      })
-      try {
+      const streaming = async () => {
+        const raw = await postSse(url, auth, { ...body, stream: true }, onProgress!, (event) => {
+          const choice = (event.choices as Array<{ delta?: { content?: string } }> | undefined)?.[0]
+          return choice?.delta?.content
+        })
         return extractJson(raw)
+      }
+
+      try {
+        return await (onProgress ? streaming() : nonStreaming())
       } catch (error) {
-        // A model that answered in prose will usually comply on a second ask.
-        console.warn('[llm] non-JSON reply, retrying once:', (error as Error).message)
-        return once()
+        // The model writes invalid JSON perhaps twice in a hundred calls — an
+        // unbalanced brace, a dropped bracket. Asking again is far cheaper than
+        // dropping the user to the rule-based parser.
+        if (!(error instanceof LlmError) || !/JSON/.test(error.message)) throw error
+        console.warn('[llm] unusable JSON, retrying once:', error.message.slice(0, 120))
+        return nonStreaming()
       }
     },
   }

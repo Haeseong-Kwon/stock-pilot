@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { extractJson, getLlmProvider, LlmError } from '@/lib/ai/provider'
+import { extractJson, firstJsonObject, getLlmProvider, LlmError } from '@/lib/ai/provider'
 
 const KEYS = ['LLM_PROVIDER', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY']
 
@@ -115,7 +115,7 @@ describe('OpenRouter request shaping', () => {
     // the model answers in prose and the request silently degrades.
     expect(body.provider).toEqual({ require_parameters: true })
     expect(body.reasoning).toEqual({ effort: 'low' })
-    expect(body.max_tokens).toBe(2048)
+    expect(body.max_tokens).toBe(8192)
   })
 
   it('retries once, without streaming, when the reply is not JSON', async () => {
@@ -156,5 +156,44 @@ describe('OpenRouter request shaping', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body).stream).toBe(true)
     expect(JSON.parse(fetchMock.mock.calls[1]![1].body).stream).toBeUndefined()
+  })
+})
+
+describe('firstJsonObject', () => {
+  it('stops at the matching brace, not the last one in the text', () => {
+    // The real failure: the model closed the object one brace too many.
+    expect(firstJsonObject('{"a":{"b":1}}}')).toBe('{"a":{"b":1}}')
+    expect(extractJson('{"reply":"ok","commands":[]}}')).toEqual({ reply: 'ok', commands: [] })
+  })
+
+  it('ignores braces inside strings', () => {
+    expect(firstJsonObject('{"a":"}{"}')).toBe('{"a":"}{"}')
+    expect(extractJson('{"reply":"use {} braces","commands":[]}')).toEqual({
+      reply: 'use {} braces',
+      commands: [],
+    })
+  })
+
+  it('ignores an escaped quote inside a string', () => {
+    expect(extractJson('{"reply":"say \\"hi\\"","commands":[]}')).toEqual({
+      reply: 'say "hi"',
+      commands: [],
+    })
+  })
+
+  it('returns null when the object never closes', () => {
+    expect(firstJsonObject('{"a":1')).toBeNull()
+    expect(() => extractJson('{"a":1')).toThrow(LlmError)
+  })
+
+  it('returns null when there is no object at all', () => {
+    expect(firstJsonObject('sorry, I cannot')).toBeNull()
+  })
+
+  it('skips prose before the object', () => {
+    expect(extractJson('Sure!\n{"reply":"ok","commands":[]}\nAnything else?')).toEqual({
+      reply: 'ok',
+      commands: [],
+    })
   })
 })

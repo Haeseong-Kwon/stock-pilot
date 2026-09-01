@@ -63,9 +63,11 @@ type Outcome = {
   reason: string
   ms: number
   cost: number
+  /** True when the first answer was unusable JSON and the retry saved it. */
+  retried?: boolean
 }
 
-async function runCase(model: string, testCase: EvalCase): Promise<Outcome> {
+async function runCase(model: string, testCase: EvalCase, retry = true): Promise<Outcome> {
   const context = testCase.needsSignal
     ? withSignal
     : testCase.needsIndicator
@@ -84,7 +86,7 @@ async function runCase(model: string, testCase: EvalCase): Promise<Outcome> {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2048,
+        max_tokens: 8192,
         response_format: { type: 'json_object' },
         reasoning: { effort: EFFORT },
         usage: { include: true },
@@ -110,7 +112,18 @@ async function runCase(model: string, testCase: EvalCase): Promise<Outcome> {
     const content = payload.choices?.[0]?.message?.content
     if (!content) return { id: testCase.id, pass: false, reason: 'empty response', ms, cost }
 
-    const envelope = AiEnvelopeSchema.safeParse(extractJson(content))
+    let raw: unknown
+    try {
+      raw = extractJson(content)
+    } catch (error) {
+      // The app retries an unusable JSON reply, so the eval must too or it
+      // measures something users never experience.
+      if (!retry) throw error
+      const second = await runCase(model, testCase, false)
+      return { ...second, retried: true, cost: second.cost + cost, ms: second.ms + ms }
+    }
+
+    const envelope = AiEnvelopeSchema.safeParse(raw)
     if (!envelope.success) return { id: testCase.id, pass: false, reason: 'bad envelope', ms, cost }
 
     const commands: ChartCommand[] = []
@@ -192,9 +205,11 @@ for (const model of MODELS) {
   const p50 = latencies[Math.floor(latencies.length / 2)] ?? 0
   const p95 = latencies[Math.floor(latencies.length * 0.95)] ?? 0
   const cost = outcomes.reduce((sum, o) => sum + o.cost, 0)
+  const retried = outcomes.filter((o) => o.retried).length
 
   console.log(
     `  ${passed}/${outcomes.length} pass (${((passed / outcomes.length) * 100).toFixed(1)}%)  ` +
-      `p50 ${p50}ms  p95 ${p95}ms  $${cost.toFixed(4)} total  $${(cost / outcomes.length).toFixed(5)}/req`,
+      `p50 ${p50}ms  p95 ${p95}ms  $${cost.toFixed(4)} total  $${(cost / outcomes.length).toFixed(5)}/req` +
+      (retried > 0 ? `  · ${retried} needed a JSON retry` : ''),
   )
 }

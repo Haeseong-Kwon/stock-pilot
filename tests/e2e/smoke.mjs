@@ -50,6 +50,44 @@ await page.goto(BASE, { waitUntil: 'networkidle' })
 await page.waitForTimeout(2500)
 
 check('chart canvas rendered', (await canvases()) > 0, `${await canvases()} canvases`)
+
+// --- terminal controls: chart type, price scale, range presets, data window ---
+const ranges = await page.getByRole('group', { name: /기간|Range/ }).locator('button').allTextContents()
+check('range presets offered', ranges.length >= 5, ranges.join(' '))
+await page.getByRole('group', { name: /기간|Range/ }).getByText('1Y', { exact: true }).click()
+await page.waitForTimeout(500)
+check(
+  'range preset applies',
+  (await page.getByRole('group', { name: /기간|Range/ }).getByText('1Y', { exact: true }).getAttribute('aria-pressed')) === 'true',
+)
+
+await page.getByLabel(/차트 종류|Chart type/).click()
+await page.waitForTimeout(250)
+const chartTypes = (await page.locator('div.absolute button').allTextContents()).filter(Boolean)
+check('every chart type listed', chartTypes.length >= 6, chartTypes.join(', '))
+await page.getByText(/^하이킨아시$|^Heikin Ashi$/).click()
+await page.waitForTimeout(700)
+check('heikin ashi renders', (await canvases()) > 0)
+
+await page.getByLabel(/가격 축|Price scale/).click()
+await page.waitForTimeout(250)
+await page.getByText(/^로그$|^Logarithmic$/).click()
+await page.waitForTimeout(600)
+check('log scale applies', (await page.getByLabel(/가격 축|Price scale/).textContent())?.match(/로그|Logarithmic/) !== null)
+
+await page.mouse.move(500, 400)
+await page.keyboard.press('d')
+await page.waitForTimeout(400)
+check('data window opens with D', (await page.locator('[data-data-window]').count()) === 1)
+const dataWindowText = (await page.locator('[data-data-window]').textContent()) ?? ''
+check(
+  'data window reads the bar at the cursor',
+  /\d{4}-\d{2}-\d{2}/.test(dataWindowText) && /Vol/.test(dataWindowText),
+  dataWindowText.replace(/\s+/g, ' ').slice(0, 60),
+)
+await page.keyboard.press('d')
+await page.waitForTimeout(300)
+check('data window closes with D', (await page.locator('[data-data-window]').count()) === 0)
 check('legend shows OHLC', await page.locator('text=/O\\s[\\d,.]+/').first().isVisible())
 
 // --- default language is Korean ---
@@ -126,6 +164,21 @@ await setLanguage('한국어')
 await send('전부 지워')
 check('annotations cleared', (await page.locator('[data-signal-badge]').count()) === 0)
 check('candles survive the clear', (await canvases()) > 0)
+
+// --- the workspace comes back after a reload ---
+await send('add RSI and Bollinger Bands')
+const beforeReload = await page.locator('[data-indicator-badge]').count()
+await page.reload({ waitUntil: 'networkidle' })
+await page.waitForTimeout(2500)
+check(
+  'indicators survive a reload',
+  (await page.locator('[data-indicator-badge]').count()) === beforeReload,
+  `${beforeReload} badge(s)`,
+)
+check(
+  'chart type survives a reload',
+  (await page.getByLabel(/차트 종류|Chart type/).textContent())?.match(/하이킨아시|Heikin Ashi/) !== null,
+)
 
 check('no uncaught page errors', errors.length === 0, errors.slice(0, 3).join(' | '))
 

@@ -174,6 +174,14 @@ describe('chat context stays within the request schema', () => {
 })
 
 describe('conversation encoding for the model', () => {
+  it('carries the commands a turn actually ran', () => {
+    const encoded = toModelMessages([
+      { role: 'assistant', content: '지표를 추가했습니다.', commands: [{ type: 'ADD_INDICATOR' }] },
+    ])
+    // Eliding them taught the model that assistant turns produce no commands.
+    expect(JSON.parse(encoded[0]!.content).commands).toEqual([{ type: 'ADD_INDICATOR' }])
+  })
+
   it('re-encodes assistant turns as the JSON envelope we want back', () => {
     const encoded = toModelMessages([
       { role: 'user', content: '추세선 그려줘' },

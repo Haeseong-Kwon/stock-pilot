@@ -4,6 +4,18 @@ import { CATALOGUE_ENTRIES } from '@/lib/ai/commandCatalogue'
 export type EvalCase = {
   id: string
   prompt: string
+  /**
+   * Earlier turns to replay first. Multi-turn is where the model actually
+   * breaks — it drops the JSON envelope, forgets state, or redraws what is
+   * already there — and a single-shot suite never sees any of that.
+   */
+  priorTurns?: string[]
+  /** What each prior turn ran, so the replayed history is realistic. */
+  priorCommands?: unknown[]
+  /** Drawings already on the chart when the case runs. */
+  existingDrawings?: Array<'trendline' | 'fibonacci' | 'channel' | 'verticalLine'>
+  /** Command types that must NOT appear (beyond `forbid`), by intent. */
+  note?: string
   /** Command types the answer must contain. */
   expect: ChartCommandType[]
   /** Satisfied when any one of these groups is fully present. */
@@ -87,4 +99,105 @@ const hard: EvalCase[] = [
   },
 ]
 
-export const EVAL_CASES: EvalCase[] = [...catalogue, ...hard]
+/**
+ * The cases a single-shot suite cannot reach: follow-ups, vague phrasing,
+ * cross-indicator comparisons and requests that should be refused.
+ */
+const advanced: EvalCase[] = [
+  {
+    id: 'multi:narrow-twice',
+    priorTurns: ['5% 이상 떨어진 날 표시해', '그중 거래량이 두 배 이상인 것만'],
+    priorCommands: [
+      { type: 'CREATE_SIGNAL', name: 'Drop ≥ 5%' },
+      { type: 'UPDATE_SIGNAL', name: 'Drop ≥ 5%' },
+    ],
+    prompt: '거기서 RSI 40 아래인 것만 다시 남겨',
+    expect: ['UPDATE_SIGNAL'],
+    contains: ['AND', 'RSI'],
+    needsSignal: true,
+    note: 'Third-level narrowing must still edit in place, not create a signal',
+  },
+  {
+    id: 'multi:no-redraw',
+    priorTurns: ['추세선 그려줘'],
+    priorCommands: [{ type: 'DRAW_TRENDLINE', kind: 'both' }],
+    prompt: '피보나치도 그려줘',
+    expect: ['DRAW_FIBONACCI'],
+    forbid: ['DRAW_TRENDLINE'],
+    existingDrawings: ['trendline'],
+    note: 'Must not re-issue a drawing the context says is already there',
+  },
+  {
+    id: 'multi:envelope-holds',
+    priorTurns: ['RSI 추가해', 'MACD도 추가해', '볼린저도'],
+    priorCommands: [
+      { type: 'ADD_INDICATOR', indicator: 'RSI', params: { period: 14 } },
+      { type: 'ADD_INDICATOR', indicator: 'MACD' },
+      { type: 'ADD_INDICATOR', indicator: 'BOLLINGER' },
+    ],
+    prompt: 'ATR도 추가해',
+    expect: ['ADD_INDICATOR'],
+    contains: ['ATR'],
+    note: 'Four turns in, the model must still answer with the JSON envelope',
+  },
+  {
+    id: 'vague:something-useful',
+    prompt: '이 종목 지금 흐름이 어떤지 볼 수 있게 뭐 좀 띄워줘',
+    expect: [],
+    forbid: ['HIGHLIGHT_RANGE', 'ZOOM_RANGE', 'SET_SYMBOL'],
+    note: 'Vague but actionable: anything is fine except inventing a window',
+  },
+  {
+    id: 'vague:overbought',
+    prompt: '지금 너무 많이 오른 것 같은데 확인해줘',
+    expect: [],
+    forbid: ['HIGHLIGHT_RANGE', 'ZOOM_RANGE'],
+  },
+  {
+    id: 'cross:di',
+    prompt: '+DI가 -DI보다 큰 구간만 표시해',
+    expect: ['CREATE_SIGNAL'],
+    contains: ['plusDi', 'minusDi'],
+    note: 'Comparing two outputs of the same indicator',
+  },
+  {
+    id: 'cross:price-vs-band',
+    prompt: '종가가 켈트너 채널 상단 위에 있는 날 표시',
+    expect: ['CREATE_SIGNAL'],
+    contains: ['KELTNER', 'upper'],
+  },
+  {
+    id: 'cross:two-indicators',
+    prompt: 'RSI가 MFI보다 높은 날 찾아줘',
+    expect: ['CREATE_SIGNAL'],
+    contains: ['RSI', 'MFI'],
+  },
+  {
+    id: 'refuse:future',
+    prompt: '다음 주에 오를지 알려줘',
+    expect: [],
+    forbid: ['CREATE_SIGNAL', 'HIGHLIGHT_RANGE', 'ZOOM_RANGE', 'ADD_PRICE_LINE'],
+    note: 'A forecast is not a chart command; it must not fake one',
+  },
+  {
+    id: 'refuse:best-month',
+    prompt: '올해 가장 많이 오른 달이 언제야?',
+    expect: [],
+    forbid: ['HIGHLIGHT_RANGE', 'ZOOM_RANGE'],
+    note: 'Ranking periods needs prices the model cannot see',
+  },
+  {
+    id: 'patterns:find',
+    prompt: '쌍바닥이나 헤드앤숄더 있는지 찾아줘',
+    expect: ['FIND_PATTERNS'],
+  },
+  {
+    id: 'drawing:trendline-window',
+    prompt: '최근 3개월 추세선만 그려줘',
+    expect: ['DRAW_TRENDLINE'],
+    contains: ['-3M'],
+    note: 'A named window must reach the command, not be dropped',
+  },
+]
+
+export const EVAL_CASES: EvalCase[] = [...catalogue, ...hard, ...advanced]

@@ -5,7 +5,12 @@ import type { Timeframe } from '@/lib/types'
 import type { Condition } from '@/lib/schemas/expression'
 import type { IndicatorParams, IndicatorType } from '@/lib/schemas/chartCommand'
 import type { Level } from '@/lib/analysis/signals'
-import type { FibonacciRetracement, RegressionChannel, Trendline } from '@/lib/analysis/drawing'
+import type {
+  ChartPattern,
+  FibonacciRetracement,
+  RegressionChannel,
+  Trendline,
+} from '@/lib/analysis/drawing'
 import { normalizeIndicator, type IndicatorDef } from '@/lib/chart/indicators'
 import type { ChartType, PriceScaleModeName } from '@/lib/chart/chartTypes'
 import type { RangePreset } from '@/lib/chart/ranges'
@@ -29,6 +34,7 @@ export type Drawing =
   | { id: string; kind: 'trendline'; line: Trendline }
   | { id: string; kind: 'fibonacci'; fib: FibonacciRetracement }
   | { id: string; kind: 'channel'; channel: RegressionChannel }
+  | { id: string; kind: 'pattern'; pattern: ChartPattern }
 
 /**
  * `Omit<Drawing, 'id'>` collapses a discriminated union to its shared keys, so

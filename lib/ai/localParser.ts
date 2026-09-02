@@ -438,7 +438,13 @@ export function parseLocally(
   const drawingRange = detectRange(text)
 
   // Drawing requests: intent only, the engine computes every anchor.
-  if (/추세선|추세\s*라인|trend\s*line|trendline/i.test(text)) {
+  if (/쌍바닥|쌍봉|이중\s*천장|이중\s*바닥|헤드\s*앤\s*숄더|헤드앤숄더|차트\s*패턴|반전\s*패턴|double\s*(top|bottom)|head\s*and\s*shoulders|reversal\s*pattern|chart\s*pattern/i.test(text)) {
+    commands.push({
+      type: 'FIND_PATTERNS',
+      ...(drawingRange ? { range: drawingRange } : {}),
+      ...(/확정|완성|confirmed/i.test(text) ? { confirmedOnly: true } : {}),
+    })
+  } else if (/추세선|추세\s*라인|trend\s*line|trendline/i.test(text)) {
     const kind = /저항|resistance/i.test(text)
       ? ('resistance' as const)
       : /지지|support/i.test(text)

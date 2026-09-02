@@ -131,15 +131,24 @@ finds the anchors in the real candles.
 | `DRAW_TRENDLINE` | Fits lines through pivot highs/lows, keeps only lines price never broke *between* their anchors, ranks by touch count, and reports where an extended line was later breached |
 | `DRAW_FIBONACCI` | Anchors on the dominant swing in the window, 0/23.6/38.2/50/61.8/78.6/100 % (+1.272/1.618 on request) |
 | `DRAW_REGRESSION_CHANNEL` | Least-squares fit ± the residual standard deviation, with R² reported |
+| `FIND_PATTERNS` | Double tops/bottoms and head-and-shoulders, each reported as confirmed or not |
 | `ADD_VERTICAL_LINE` | A date the **user** named |
 
 A trendline that has already been broken is drawn dashed and reported as broken, rather than being
 extended as if it still held. With no window named, a drawing covers the recent ~200 bars — putting
 a retracement on a three-year-old high is never what "draw the fib" means.
 
+A head and shoulders always contains a double top between its shoulders; the more specific shape
+wins, so the head is never lost to the coarser one. An unconfirmed shape is drawn dashed and
+labelled unconfirmed rather than being presented as a signal.
+
 Verified against live BTCUSDT: the resistance line touched 4 pivots over 103 bars with **zero**
 candles crossing it, the support line 3, and the Fibonacci anchored exactly on the window's real
 high and low.
+
+**The engine states its own numbers.** The reply streams before any command runs, so the model
+cannot know that a trendline has 4 touches or a signal 7 matches — and must not guess. A separate
+line under each reply is written by the engine from the executed results.
 
 ### The signal DSL
 
@@ -263,18 +272,19 @@ It spends real money (about $0.002 per model per run at GLM prices), which is wh
 `npm test`. Cases assert command *types* and required substrings, and accept equivalent answers
 where more than one command sequence reaches the same chart state.
 
-Last run (47 cases, `effort=low`):
+Last run (65 cases, `effort=low`):
 
 | model | accuracy | p50 | p95 | cost/request |
 | --- | --- | --- | --- | --- |
-| `z-ai/glm-5.3-flash` **(default)** | 47/47 | 1,476ms | 3,795ms | **$0.00006** |
+| `z-ai/glm-5.3-flash` **(default)** | 65/65 | 2,340ms | 5,539ms | **$0.00007** |
 
 An earlier 38-case run also had `openai/gpt-5-mini` (38/38, p50 497ms, $0.00074) and
 `deepseek/deepseek-v4-flash` (38/38, p50 1,730ms, $0.00019) at 100%.
 
-All three are correct on every case, so the default is the cheapest of them — GLM is 15× cheaper
-than gpt-5-mini, which in turn is about 2× faster. Note that a set every candidate aces no longer
-discriminates: harder cases are needed before this table can pick a winner on quality again.
+The suite now covers multi-turn follow-ups, vague phrasing, cross-indicator comparisons and
+requests that should be refused — the cases a single-shot suite cannot reach. It earned its keep
+immediately: at 64/65 it caught the model going silent four turns into a conversation, which traced
+back to our own history encoding sending every past assistant turn with an empty command list.
 
 ## Scripts
 

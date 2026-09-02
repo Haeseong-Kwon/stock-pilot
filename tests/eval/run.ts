@@ -69,11 +69,26 @@ type Outcome = {
 }
 
 async function runCase(model: string, testCase: EvalCase, retry = true): Promise<Outcome> {
-  const context = testCase.needsSignal
+  const base = testCase.needsSignal
     ? withSignal
     : testCase.needsIndicator
       ? withIndicator
       : baseContext
+  const context: ChartContext = { ...base, drawings: testCase.existingDrawings ?? [] }
+
+  // Replay the earlier turns so the model sees the conversation it would have.
+  const history = (testCase.priorTurns ?? []).flatMap((turn, index) => [
+    { role: 'user' as const, content: turn },
+    {
+      role: 'assistant' as const,
+      // A realistic prior turn did something; a canned empty list is exactly
+      // what taught the model to stop acting.
+      content: JSON.stringify({
+        reply: '적용했습니다.',
+        commands: [(testCase.priorCommands ?? [])[index] ?? { type: 'ADD_INDICATOR', indicator: 'RSI' }],
+      }),
+    },
+  ])
   const started = Date.now()
   let cost = 0
 
@@ -95,6 +110,7 @@ async function runCase(model: string, testCase: EvalCase, retry = true): Promise
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: `Chart state:\n${buildContextMessage(context, 'ko')}` },
           { role: 'assistant', content: '{"reply":"Understood — chart state noted.","commands":[]}' },
+          ...history,
           { role: 'user', content: testCase.prompt },
         ],
       }),

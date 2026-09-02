@@ -430,6 +430,40 @@ export function FinancialChart({ candles, loading, error, onRetry }: Props) {
         }
       }
 
+      if (drawing.kind === 'pattern') {
+        const { pattern } = drawing
+        const color = pattern.bias === 'bearish' ? '#ef5350' : '#26a69a'
+        // The shape itself: one polyline through its pivots.
+        const shape = chart.addSeries(
+          LineSeries,
+          {
+            color,
+            lineWidth: 2,
+            lineStyle: pattern.confirmed ? LineStyle.Solid : LineStyle.Dashed,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          },
+          0,
+        )
+        shape.setData(
+          pattern.points.map((point) => ({
+            time: point.time as UTCTimestamp,
+            value: point.price,
+          })),
+        )
+        drawingSeriesRef.current.push(shape)
+
+        segment(
+          { time: pattern.necklineFrom, price: pattern.neckline },
+          { time: pattern.necklineTo, price: pattern.neckline },
+          color,
+          LineStyle.Dotted,
+          1,
+          pattern.confirmed ? 'neckline ✓' : 'neckline',
+        )
+      }
+
       if (drawing.kind === 'channel') {
         const { channel } = drawing
         segment(

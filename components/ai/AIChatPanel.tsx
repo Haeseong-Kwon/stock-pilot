@@ -53,7 +53,11 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
             messages: useAiStore
               .getState()
               .messages.slice(-12)
-              .map((m) => ({ role: m.role, content: m.content })),
+              .map((m) => ({
+                role: m.role,
+                content: m.content,
+                ...(m.commands && m.commands.length > 0 ? { commands: m.commands } : {}),
+              })),
             context: buildChartContext({
               symbol: chart.symbol,
               timeframe: chart.timeframe,
@@ -96,6 +100,7 @@ export function AIChatPanel({ candles }: { candles: Candle[] }) {
           update(entry.id, {
             content: event.reply,
             results,
+            commands: event.commands,
             mode: event.mode,
             streaming: false,
             ...(event.failed ? { failed: true } : {}),

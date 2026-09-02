@@ -2,7 +2,12 @@ import type { Candle } from '@/lib/types'
 import type { ChartCommand, ChartCommandType } from '@/lib/schemas/chartCommand'
 import type { MessageKey } from '@/lib/i18n/messages'
 import { evaluateSignal, findSupportResistance } from '@/lib/analysis/signals'
-import { fibonacciRetracement, findTrendlines, regressionChannel } from '@/lib/analysis/drawing'
+import {
+  fibonacciRetracement,
+  findPatterns,
+  findTrendlines,
+  regressionChannel,
+} from '@/lib/analysis/drawing'
 import { resolveDateRef, resolveRange } from '@/lib/dates'
 import { useChartStore, type ChartState } from '@/stores/chartStore'
 import { describeCondition } from './describe'
@@ -270,6 +275,29 @@ export function executeCommand(
         labelKey: 'cmd.channel',
         detail: `${channel.slope >= 0 ? '↗' : '↘'} R² ${channel.fit.toFixed(2)}`,
         status: 'ok',
+      }
+    }
+
+    case 'FIND_PATTERNS': {
+      const scoped = scopedCandles(candles, command.range)
+      const all = findPatterns(scoped)
+      const patterns = (command.confirmedOnly ? all.filter((p) => p.confirmed) : all).slice(
+        0,
+        command.maxPatterns ?? 3,
+      )
+      store.replaceDrawings(
+        'pattern',
+        patterns.map((pattern) => ({ kind: 'pattern' as const, pattern })),
+      )
+      return {
+        type: command.type,
+        labelKey: 'cmd.patterns',
+        detail: patterns
+          .map((p) => `${p.kind}${p.confirmed ? '' : ' (unconfirmed)'}`)
+          .join(', '),
+        count: patterns.length,
+        status: patterns.length > 0 ? 'ok' : 'empty',
+        ...(patterns.length === 0 ? { messageKey: 'msg.noPatterns' as const } : {}),
       }
     }
 

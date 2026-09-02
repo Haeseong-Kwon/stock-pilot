@@ -28,7 +28,17 @@ export type ChartContext = z.infer<typeof ChartContextSchema>
 
 export const ChatRequestSchema = z.object({
   messages: z
-    .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().min(1).max(4000) }))
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string().min(1).max(4000),
+        /**
+         * What that assistant turn actually ran. Sending every past turn with an
+         * empty command list taught the model to answer with none of its own.
+         */
+        commands: z.array(z.unknown()).max(12).optional(),
+      }),
+    )
     .min(1)
     .max(20),
   context: ChartContextSchema,

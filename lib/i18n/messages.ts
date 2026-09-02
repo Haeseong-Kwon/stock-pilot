@@ -93,6 +93,13 @@ const ko = {
   'ai.error.status': '요청이 실패했습니다 ({status})',
 
   'result.matches': '{count}건 일치',
+  'summary.title': '엔진 계산 결과',
+  'summary.signal': '“{name}” 조건에 {count}개 봉이 일치합니다.',
+  'summary.trendline': '추세선 {count}개를 찾았습니다 ({detail}).',
+  'summary.fibonacci': '지배적 스윙에 {count}개 되돌림 레벨을 그렸습니다.',
+  'summary.levels': '반복 확인된 레벨 {count}개를 찾았습니다.',
+  'summary.patterns': '패턴 {count}개를 찾았습니다 ({detail}).',
+  'summary.channel': '회귀 채널 적합도 {detail}.',
 
   'cmd.symbol': '심볼 변경',
   'cmd.timeframe': '타임프레임 변경',
@@ -111,6 +118,7 @@ const ko = {
   'cmd.fibonacci': '피보나치 되돌림',
   'cmd.channel': '회귀 채널',
   'cmd.verticalLine': '수직선',
+  'cmd.patterns': '차트 패턴',
   'cmd.failed': '실패',
 
   'msg.noMatches': '조건과 일치하는 구간을 찾지 못했습니다.',
@@ -119,6 +127,7 @@ const ko = {
   'msg.trendlineBroken': '가격이 이미 이탈한 추세선이 포함되어 있습니다.',
   'msg.noSwing': '되돌림을 측정할 만한 스윙이 이 구간에 없습니다.',
   'msg.noChannel': '채널을 맞출 데이터가 부족합니다.',
+  'msg.noPatterns': '이 구간에서 알려진 반전 패턴을 찾지 못했습니다.',
   'msg.noSignal': '아직 수정할 시그널이 없습니다.',
   'msg.badRange': '날짜 범위를 이해하지 못했습니다.',
   'msg.unexpected': '명령을 실행하지 못했습니다.',
@@ -225,6 +234,13 @@ const en: Record<MessageKey, string> = {
   'ai.error.status': 'Request failed ({status})',
 
   'result.matches': '{count} matches',
+  'summary.title': 'Computed by the engine',
+  'summary.signal': '{count} bars match “{name}”.',
+  'summary.trendline': 'Found {count} trendline(s) ({detail}).',
+  'summary.fibonacci': 'Drew {count} retracement levels on the dominant swing.',
+  'summary.levels': 'Found {count} repeatedly tested level(s).',
+  'summary.patterns': 'Found {count} pattern(s) ({detail}).',
+  'summary.channel': 'Regression channel fit {detail}.',
 
   'cmd.symbol': 'Symbol',
   'cmd.timeframe': 'Timeframe',
@@ -243,6 +259,7 @@ const en: Record<MessageKey, string> = {
   'cmd.fibonacci': 'Fibonacci retracement',
   'cmd.channel': 'Regression channel',
   'cmd.verticalLine': 'Vertical line',
+  'cmd.patterns': 'Chart patterns',
   'cmd.failed': 'Failed',
 
   'msg.noMatches': 'No bars matched this condition.',
@@ -251,6 +268,7 @@ const en: Record<MessageKey, string> = {
   'msg.trendlineBroken': 'One of these trendlines has already been broken.',
   'msg.noSwing': 'There is no swing large enough to measure a retracement against.',
   'msg.noChannel': 'Not enough data to fit a channel.',
+  'msg.noPatterns': 'No known reversal shape formed in this window.',
   'msg.noSignal': 'There is no signal to update yet.',
   'msg.badRange': 'Could not read that date range.',
   'msg.unexpected': 'The command could not be executed.',

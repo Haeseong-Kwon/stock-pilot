@@ -10,6 +10,8 @@ export type ChatEntry = {
   role: ChatRole
   content: string
   results?: CommandResult[]
+  /** The commands this turn ran, replayed to the model on later turns. */
+  commands?: unknown[]
   /** Which engine produced the commands: a provider id, `demo`, or `fallback`. */
   mode?: string
   failed?: boolean

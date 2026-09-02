@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { ChatEntry } from '@/stores/aiStore'
 import { useT } from '@/stores/localeStore'
+import { summarizeResults } from '@/lib/chart/summarize'
 import { CommandResultList } from './CommandResultList'
 
 /**
@@ -26,6 +27,20 @@ function Waiting({ since }: { since: number }) {
       {t('ai.thinking')}
       <span className="tnum">{elapsed.toFixed(1)}s</span>
     </span>
+  )
+}
+
+/** Numbers the model never saw, stated by the engine that computed them. */
+function EngineSummary({ results }: { results: NonNullable<ChatEntry['results']> }) {
+  const t = useT()
+  const summary = summarizeResults(results, t)
+  if (!summary) return null
+
+  return (
+    <p className="mt-1.5 flex gap-1.5 text-[11.5px] leading-relaxed text-text">
+      <span className="mt-[3px] h-1 w-1 shrink-0 rounded-full bg-accent" />
+      <span>{summary}</span>
+    </p>
   )
 }
 
@@ -63,6 +78,7 @@ export function ChatMessage({ entry }: { entry: ChatEntry }) {
           ) : null}
         </p>
       )}
+      {entry.results ? <EngineSummary results={entry.results} /> : null}
       {entry.results ? <CommandResultList results={entry.results} /> : null}
     </div>
   )

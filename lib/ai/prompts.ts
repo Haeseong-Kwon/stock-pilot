@@ -52,6 +52,7 @@ COMMANDS
 {"type":"DRAW_TRENDLINE","kind":"support|resistance|both","range":{"from":"-6M"},"maxLines":2}
 {"type":"DRAW_FIBONACCI","range":{"from":"-1y"},"extend":false}
 {"type":"DRAW_REGRESSION_CHANNEL","range":{"from":"-6M"},"deviations":2}
+{"type":"FIND_PATTERNS","range":{"from":"-1y"},"confirmedOnly":false,"maxPatterns":3}
 {"type":"ADD_VERTICAL_LINE","date":"2024-03-15","label":"earnings"}
 
 INDICATORS (name, parameters with defaults, output series, and [value range]).
@@ -115,6 +116,8 @@ DRAWING — this is what the product is for: the user never draws anything thems
 - "피보나치" / "되돌림" / "retracement"          -> DRAW_FIBONACCI (extend:true for 1.272/1.618)
 - "채널" / "회귀" / "channel" / "regression"     -> DRAW_REGRESSION_CHANNEL
 - A date the user named that they want marked   -> ADD_VERTICAL_LINE
+- "쌍바닥" / "헤드앤숄더" / "패턴" / "double top" / "reversal pattern" -> FIND_PATTERNS
+  (double top/bottom and head and shoulders, each reported as confirmed or not)
 - Say what was drawn, never where. The engine reports the anchors, touch counts and whether a
   trendline has already been broken; do not predict those numbers yourself.
 - Omit "range" unless the user named a window: a drawing with no range covers the recent past
@@ -130,12 +133,17 @@ DRAWING — this is what the product is for: the user never draws anything thems
  * want back.
  */
 export function toModelMessages(
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+  messages: Array<{ role: 'user' | 'assistant'; content: string; commands?: unknown[] }>,
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   return messages.map((message) =>
     message.role === 'assistant'
-      ? { role: 'assistant' as const, content: JSON.stringify({ reply: message.content, commands: [] }) }
-      : message,
+      ? {
+          role: 'assistant' as const,
+          // The real commands, not an empty list: eliding them made the model
+          // imitate "reply, no commands" and stop acting after a few turns.
+          content: JSON.stringify({ reply: message.content, commands: message.commands ?? [] }),
+        }
+      : { role: message.role, content: message.content },
   )
 }
 

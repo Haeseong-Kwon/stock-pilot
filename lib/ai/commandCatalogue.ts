@@ -321,6 +321,15 @@ export const COMMAND_CATALOGUE: CatalogueGroup[] = [
         produces: 'DRAW_REGRESSION_CHANNEL',
       },
       {
+        id: 'patterns',
+        prompt: { ko: '차트 패턴 찾아줘', en: 'find chart patterns' },
+        effect: {
+          ko: '쌍봉·쌍바닥·헤드앤숄더를 찾고 완성 여부까지 표시합니다',
+          en: 'Double tops/bottoms and head-and-shoulders, each marked confirmed or not',
+        },
+        produces: 'FIND_PATTERNS',
+      },
+      {
         id: 'verticalLine',
         prompt: { ko: '2025년 4월 7일에 수직선 그어줘', en: 'mark 2025-04-07 with a vertical line' },
         effect: { ko: '지정한 날짜에 세로선', en: 'A vertical marker on that date' },

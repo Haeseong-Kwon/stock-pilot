@@ -101,6 +101,13 @@ export const ChartCommandSchema = z.union([
     deviations: z.number().positive().max(5).optional(),
   }),
   z.object({
+    type: z.literal('FIND_PATTERNS'),
+    range: RangeSchema.optional(),
+    /** Only report shapes price has already completed. */
+    confirmedOnly: z.boolean().optional(),
+    maxPatterns: z.number().int().positive().max(6).optional(),
+  }),
+  z.object({
     type: z.literal('ADD_VERTICAL_LINE'),
     date: DateRef,
     label: z.string().max(60).optional(),
